@@ -258,17 +258,22 @@ def _log_kaynaklari_listele(satir=200):
     from .cihaz.ortak import kuyruk
 
     ayar = ayar_modul.oku()
-    kaynaklar = L.bul(L.desenler(ayar))
+    kaynaklar = L.bul(L.desenler(ayar), ayar=ayar)
     if not kaynaklar:
-        print("günlük dosyası bulunamadı.")
+        print("günlük kaynağı bulunamadı.")
         print("Kendi dosyalarınızı ekleyin (~/.config/syspano/config.json):")
-        print('  "log_dosyalari": ["~/projelerim/*/storage/logs/*.log"]')
+        print('  "log_dosyalari": ["~/projelerim/*/storage/logs/*.log", "journal:benim-servisim"]')
         return 0
 
-    print(f"{'günlük':<22} {'son yazılma':<12} {'boyut':>8} {'hata':>5} {'uyarı':>6}  yol")
+    print(f"{'günlük':<22} {'son yazılma':<12} {'boyut':>8} {'hata':>5} {'uyarı':>6}  yol / birim")
     print("-" * 100)
     simdi = time.time()
     for k in kaynaklar:
+        if k.get("tur") == "journal":
+            ozet = L.ozet(L.gunluk_journal(k["birim"], max(1, satir))[0])
+            print(f"{k['etiket']:<22} {'journal':<12} {'—':>8} "
+                  f"{ozet['hata']:>5} {ozet['uyari']:>6}  {k['birim']}")
+            continue
         if not k["okunabilir"]:
             print(f"{k['etiket']:<22} {'izin yok':<12} {'—':>8} {'—':>5} {'—':>6}  {k['yol']}")
             continue
@@ -276,7 +281,8 @@ def _log_kaynaklari_listele(satir=200):
         yas = _yas_metni(simdi - k["son"]) if k["son"] else "—"
         print(f"{k['etiket']:<22} {yas:<12} {_boyut(k['boyut']):>8} "
               f"{ozet['hata']:>5} {ozet['uyari']:>6}  {k['yol']}")
-    print(f"\n{len(kaynaklar)} günlük · içeriği için: syspano --log-dosya YOL")
+    print(f"\n{len(kaynaklar)} günlük · içeriği için: syspano --log-dosya YOL "
+          f"(journal kaynakları için: syspano --log BIRIM)")
     return 0
 
 

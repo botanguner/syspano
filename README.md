@@ -34,7 +34,7 @@ tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub
 | **DİSK / AĞ** | Kök disk okuma/yazma, doluluk, ağ arayüzü, IP, ↓/↑ hızı |
 | **SÜREÇLER** | En çok CPU kullanan süreçler |
 | **SERVİSLER** | systemd servislerinin durumu (Apache, MySQL, nginx, Docker…); **dokununca günlüğü açılır** |
-| **GÜNLÜKLER** | Geliştirici günlükleri: **PHP/PHP-FPM**, Apache, nginx, Laravel/Symfony/WordPress, MySQL/MariaDB, PostgreSQL, Redis, MongoDB, PM2, Caddy, Jenkins…; **dokununca son 200 satır** + "yalnız hata" süzgeci |
+| **GÜNLÜKLER** | Geliştirici günlükleri: **PHP/PHP-FPM**, Apache, nginx, Laravel/Symfony/WordPress, MySQL/MariaDB, PostgreSQL, Redis, MongoDB, PM2, Caddy, Jenkins, **journald servisleri** (MariaDB, SSH, çekirdek); **dokununca son 200 satır** + "yalnız hata" süzgeci |
 | **YEDEK** | *(isteğe bağlı)* gdrive-yedek durumu: son yedek, dosya sayısı, boyut, sıradaki çalışma |
 | **SİSTEM** | Ana makine adı, dağıtım, çekirdek, mimari, çalışma süresi, oturum |
 
@@ -513,7 +513,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **14 dosyada 132 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **14 dosyada 138 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -636,14 +636,23 @@ bulunamazsa kart çizilmez, bulunmayan yollar sessizce elenir.
 | **Apache / nginx** | `/var/log/apache2/error.log` · `access.log` (Debian/Pi), `/var/log/httpd/error_log` (Fedora/RHEL), `/var/log/nginx/error.log` · `access.log` |
 | **Veritabanı** | MySQL/MariaDB `error.log` ve yavaş sorgu günlüğü, PostgreSQL, Redis, MongoDB |
 | **Sunucu** | Jenkins, `syslog`, `messages`, `kern.log`, `auth.log`, paket yöneticisi günlükleri |
+| **journald** | Dosya günlüğü **olmayan** servisler `journalctl` üzerinden: **MariaDB, MySQL, PostgreSQL, Redis, Docker, SSH** ve **çekirdek** günlüğü (`journalctl -k`). Kartta sağda `journal` yazar |
 
-Kendi dosyalarınızı `log_dosyalari` ile ekleyin (glob ve `~` desteklenir):
+**journald kaynakları neden gerekli?** Debian/Ubuntu/Pi'de MariaDB ve PostgreSQL
+günlüklerini dosyaya değil **journald**'a yazar (`/var/log/mysql/error.log`
+yoktur), `rsyslog` kurulu değilse `/var/log/syslog` de yoktur. Bu yüzden
+kurulu **ve çalışan** (ya da `failed`) servisler tek bir `systemctl show`
+çağrısıyla bulunup `journalctl` kaynağı olarak listeye eklenir.
+
+Kendi dosyalarınızı `log_dosyalari` ile ekleyin (glob ve `~` desteklenir);
+`journal:` ön ekiyle bir systemd birimini de ekleyebilirsiniz:
 
 ```json
 {
   "log_dosyalari": [
     "~/projelerim/*/storage/logs/*.log",
-    "/srv/api/logs/error.log"
+    "/srv/api/logs/error.log",
+    "journal:benim-servisim"
   ]
 }
 ```
@@ -662,12 +671,14 @@ syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hata
 ```
 
 > [!NOTE]
-> **Maliyet yine ölçüldü:** keşif (bilinen yolların `glob` + `stat`'ı) dizüstünde
-> **~1 ms**; açılışta ve **10 dakikada bir** yapılır. Boyut/yaş tazeleme
-> 5 saniyede bir (dosya başına ~0,005 ms). Dosya **içeriği** yalnızca
-> görüntüleyici açıkken okunur: 200 satır ≈ 0,14 ms, en fazla 512 KiB okunur
-> (tek satırlık dev bir günlük belleği şişirmesin). Kart hiçbir dosyanın
-> içeriğini okumaz — SD kartta her okuma pahalıdır.
+> **Maliyet yine ölçüldü:** dosya keşfi (`glob` + `stat`) dizüstünde **~1 ms**,
+> Raspberry Pi'de **~2,7 ms**; journald birimleri için **tek** `systemctl show`
+> çağrısı eklenir (~40–90 ms). İkisi birlikte kaynak listesini 10 dakikada bir
+> tazeler, yani saniyeye düşen maliyet **~0,2 ms**'dir. Boyut/yaş tazeleme
+> 5 saniyede bir (dosya başına ~0,005 ms; journal kaynakları için stat yok).
+> Dosya **içeriği** yalnızca görüntüleyici açıkken okunur: 200 satır ≈ 0,14 ms,
+> en fazla 512 KiB (tek satırlık dev bir günlük belleği şişirmesin). Kart
+> hiçbir dosyanın içeriğini okumaz — SD kartta her okuma pahalıdır.
 
 ## Teknolojiler
 
@@ -679,7 +690,7 @@ syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hata
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 132 test / 14 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 138 test / 14 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

@@ -70,7 +70,7 @@ def test_bul_desenleri_genisletir_ve_siralar():
         _yaz(d, "ilgisiz.txt", ["z"])
         desenler = [("apache", "Apache", os.path.join(d, "err*.log")),
                     ("php", "PHP-FPM", os.path.join(d, "php*-fpm.log"))]
-        kaynaklar = L.bul(desenler)
+        kaynaklar = L.bul(desenler, journal=False)
         assert [k["etiket"] for k in kaynaklar] == ["PHP-FPM", "Apache"], \
             "grup sırası korunmalı (php önce)"
         yol = {k["yol"] for k in kaynaklar}
@@ -85,12 +85,12 @@ def test_bul_ayni_dosyayi_iki_kez_saymaz():
         yol = _yaz(d, "error.log", ["x"])
         bag = os.path.join(d, "kopya.log")
         os.symlink(yol, bag)
-        kaynaklar = L.bul([("apache", "Apache", yol), ("ozel", "Kopya", bag)])
+        kaynaklar = L.bul([("apache", "Apache", yol), ("ozel", "Kopya", bag)], journal=False)
         assert len(kaynaklar) == 1, f"aynı dosya iki kez: {[k['yol'] for k in kaynaklar]}"
 
 
 def test_bul_olmayan_deseni_sessizce_eler():
-    assert L.bul([("php", "PHP", "/yok/boyle/*.log")]) == []
+    assert L.bul([("php", "PHP", "/yok/boyle/*.log")], journal=False) == []
 
 
 def test_okunamayan_dosya_izin_yok_der_ve_kartta_isaretlenir():
@@ -104,7 +104,7 @@ def test_okunamayan_dosya_izin_yok_der_ve_kartta_isaretlenir():
     metin, kaynak = L.gunluk(hedef, 5)
     assert kaynak == "izin yok", kaynak
     assert "usermod" in metin, "çözüm önerisi yok"
-    kaynaklar = L.bul([("sunucu", "Kimlik", hedef)])
+    kaynaklar = L.bul([("sunucu", "Kimlik", hedef)], journal=False)
     assert kaynaklar and kaynaklar[0]["okunabilir"] is False
 
 
@@ -131,6 +131,94 @@ def test_desenler_kendi_dosyalarimizi_bulur():
         ayar = {"log_dosyalari": [os.path.join(d, "*.log")]}
         ozel = [k for k in L.bul(L.desenler(ayar)) if k["grup"] == "ozel"]
         assert [k["yol"] for k in ozel] == [yol]
+
+
+# ─── journald kaynakları (dosya günlüğü olmayan servisler) ───────────────────
+def _sahte_systemctl(units):
+    """systemctl/journalctl çağrılarını taklit eder; çağrıları kaydeder."""
+    cagrilar = []
+
+    def sahte(cmd, zaman=8):
+        cagrilar.append(list(cmd))
+        if "show" in cmd:
+            bloklar = []
+            for ad, durum in units.items():
+                bloklar.append(f"Id={ad}\nLoadState={durum[0]}\nActiveState={durum[1]}")
+            return 0, "\n\n".join(bloklar)
+        if "journalctl" in cmd:
+            return 0, "2026-10-08 21:00:00 mariadb[1]: hazır"
+        return 1, ""
+
+    return sahte, cagrilar
+
+
+def test_journal_kaynaklari_yalniz_calisan_birimleri_alir():
+    from syspano.cihaz import servisler as S
+    sahte, cagrilar = _sahte_systemctl({
+        "mariadb.service": ("loaded", "active"),
+        "postgresql.service": ("loaded", "inactive"),
+        "mysql.service": ("not-found", "inactive"),
+    })
+    gercek = S._calistir
+    S._calistir = sahte
+    try:
+        kaynaklar = L.journal_kaynaklari({})
+    finally:
+        S._calistir = gercek
+    birimler = [k["birim"] for k in kaynaklar]
+    assert "mariadb.service" in birimler, birimler
+    assert "postgresql.service" not in birimler, "durmuş servis listeye girmemeli"
+    assert "mysql.service" not in birimler, "kurulu olmayan servis girmemeli"
+    assert all(k["tur"] == "journal" for k in kaynaklar)
+    # keşif TEK çağrıyla yapılmalı (her birim için ayrı systemctl değil)
+    assert sum(1 for c in cagrilar if "show" in c) == 1, cagrilar
+
+
+def test_journal_kaynagi_dosyalardan_sonra_gelir():
+    from syspano.cihaz import servisler as S
+    sahte, _ = _sahte_systemctl({"mariadb.service": ("loaded", "active")})
+    gercek = S._calistir
+    S._calistir = sahte
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            yol = _yaz(d, "error.log", ["hata: bir şey"])
+            kaynaklar = L.bul([("veritabani", "MySQL", yol)], ayar={})
+    finally:
+        S._calistir = gercek
+    turler = [(k["grup"], k["tur"]) for k in kaynaklar]
+    assert turler[0] == ("veritabani", "dosya"), turler
+    assert turler[1] == ("veritabani", "journal"), turler
+    assert kaynaklar[1]["etiket"] == "MariaDB"
+
+
+def test_journal_kaynagi_yapilandirmayla_eklenir():
+    from syspano.cihaz import servisler as S
+    sahte, _ = _sahte_systemctl({"benim-servisim.service": ("loaded", "active")})
+    gercek = S._calistir
+    S._calistir = sahte
+    try:
+        kaynaklar = L.journal_kaynaklari({"log_dosyalari": ["journal:benim-servisim"]})
+    finally:
+        S._calistir = gercek
+    ozel = [k for k in kaynaklar if k["grup"] == "ozel"]
+    assert ozel and ozel[0]["birim"] == "benim-servisim.service", kaynaklar
+
+
+def test_gunluk_journal_birim_ve_cekirdek():
+    from syspano.cihaz import servisler as S
+    sahte, cagrilar = _sahte_systemctl({})
+    gercek = S._calistir
+    S._calistir = sahte
+    try:
+        metin, kaynak = L.gunluk_journal("mariadb.service", 5)
+        assert "mariadb" in metin and kaynak == "journalctl"
+        assert any("mariadb.service" in c for c in cagrilar if "journalctl" in c)
+        metin, kaynak = L.gunluk_journal(L.CEKIRDEK_BIRIMI, 7)
+        assert kaynak == "journalctl -k"
+        cekirdek_cagri = [c for c in cagrilar if "journalctl" in c and "-k" in c]
+        assert cekirdek_cagri and "7" in cekirdek_cagri[0], cagrilar
+    finally:
+        S._calistir = gercek
 
 
 # ─── özet ve süzgeç ──────────────────────────────────────────────────────────
@@ -184,7 +272,7 @@ def test_oku_dosya_kaybolunca_listeden_duser():
     with tempfile.TemporaryDirectory() as klasor:
         yol = _yaz(klasor, "proje.log", ["x"])
         d = _durum()
-        d.log_kaynaklar = L.bul([("ozel", "Proje", yol)])
+        d.log_kaynaklar = L.bul([("ozel", "Proje", yol)], journal=False)
         d.log_kesif = ortak.zaman()          # keşif taze; yeniden taranmasın
         assert len(d.log_kaynaklar) == 1
         os.unlink(yol)

@@ -3,6 +3,47 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.5.0] — 2026-10-08
+
+### Eklendi
+- **journald günlük kaynakları: dosyaya yazmayan servisler de panoda.** Debian /
+  Ubuntu / Raspberry Pi OS'ta MariaDB, PostgreSQL, Redis, Docker ve SSH
+  günlüklerini dosyaya değil **journald**'a yazar (`/var/log/mysql/error.log`
+  yoktur; `rsyslog` kurulu değilse `/var/log/syslog` de yoktur). GÜNLÜKLER kartı
+  artık bunları `journalctl` üzerinden listeler:
+  - **MariaDB, MySQL, PostgreSQL, Redis, Docker, SSH** ve **çekirdek günlüğü**
+    (`journalctl -k`).
+  - Keşif **tek** `systemctl show` çağrısıyla yapılır (~30–90 ms) ve yalnızca
+    kurulu **ve** çalışan/başarısız birimler listeye girer — durmuş bir servisin
+    boş günlüğü kartta yer kaplamaz.
+  - Kart satırında sağda `journal` yazar (dosya kaynaklarında yaş · boyut).
+    Satıra dokununca görüntüleyici `journalctl` çıktısını açar; başlıkta okunur
+    ad (ör. `MariaDB`) ve birim adı görünür. Hata/uyarı sayısı ve **Yalnız hata**
+    süzgeci journal kaynaklarında da çalışır.
+  - `log_dosyalari` içine `"journal:benim-servisim"` yazarak kendi birimlerinizi
+    ekleyebilirsiniz (kısa ad `.service` olarak tamamlanır).
+- `cihaz/loglar.py`: `journal_kaynaklari()`, `gunluk_journal()`; `bul()` artık
+  dosya + journal kaynaklarını birlikte döndürür (dosya kaynakları önce).
+- `syspano --log-kaynaklar` çıktısı journal kaynaklarını da listeler (hata/uyarı
+  sayısıyla); `syspano --log BIRIM` ile içeriği yazdırılır.
+
+### Değişti
+- GÜNLÜKLER kartında sıralama: aynı grup içinde **dosya kaynakları önce** (en
+  yeni yazılan en üstte), journal kaynakları sonra.
+
+### Ölçüm (Raspberry Pi 4)
+- Dosya keşfi **2,67 ms**; journald birimleri için **tek** `systemctl show`
+  çağrısı eklenir. İkisi birlikte 10 dakikada bir çalışır (saniyeye düşen
+  maliyet ~0,2 ms); tazeleme dosya başına ~0,06 ms (journal kaynaklarında stat
+  yok).
+- Panelin toplam CPU'su: **%3,8** tek çekirdek (`guncelleme_ms=2000`).
+
+### Test
+- 6 yeni test (toplam **14 dosyada 138 test**): journal keşfi (tek çağrı, yalnız
+  çalışan birimler), dosya-journal sıralaması, `journal:birim` yapılandırması,
+  `journalctl -k`/`-u` çağrıları, kartta `log_journal` eylemi ve "journal"
+  etiketi, görüntüleyicide journal kaynağı.
+
 ## [1.4.3] — 2026-10-08
 
 ### Düzeltildi

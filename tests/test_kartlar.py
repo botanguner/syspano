@@ -46,19 +46,22 @@ ORNEK = {
     "loglar": {"yok": False, "toplam": 5, "kaynaklar": [
         {"grup": "php", "etiket": "PHP-FPM", "ad": "php8.2-fpm.log",
          "yol": "/var/log/php8.2-fpm.log", "boyut": 240_000, "son": 1_700_000_000.0,
-         "okunabilir": True},
+         "okunabilir": True, "tur": "dosya"},
         {"grup": "uygulama", "etiket": "Laravel", "ad": "laravel.log",
          "yol": "/var/www/ornek/storage/logs/laravel.log", "boyut": 1_450_000,
-         "son": 1_700_000_000.0, "okunabilir": True},
+         "son": 1_700_000_000.0, "okunabilir": True, "tur": "dosya"},
         {"grup": "apache", "etiket": "Apache", "ad": "error.log",
          "yol": "/var/log/apache2/error.log", "boyut": 88_000, "son": 1_700_000_000.0,
-         "okunabilir": True},
+         "okunabilir": True, "tur": "dosya"},
+        {"grup": "veritabani", "etiket": "MariaDB", "ad": "mariadb.service",
+         "yol": "", "birim": "mariadb.service", "tur": "journal",
+         "boyut": 0, "son": 0.0, "okunabilir": True},
         {"grup": "veritabani", "etiket": "PostgreSQL", "ad": "postgresql-16-main.log",
          "yol": "/var/log/postgresql/postgresql-16-main.log", "boyut": 420_000,
-         "son": 1_700_000_000.0, "okunabilir": True},
+         "son": 1_700_000_000.0, "okunabilir": True, "tur": "dosya"},
         {"grup": "veritabani", "etiket": "MySQL", "ad": "error.log",
          "yol": "/var/log/mysql/error.log", "boyut": 64_000, "son": 1_700_000_000.0,
-         "okunabilir": False}]},
+         "okunabilir": False, "tur": "dosya"}]},
     "guc": {"tur": "RAPL", "pl1": 15, "pl2": 25, "governor": "powersave"},
     "yedek": {"durum": "basarili", "baslangic": 1000, "bitis": 2000, "sonuc": 0,
               "yuklenen": 39, "toplam_dosya": 2235, "toplam_bayt": 1_435_350_008,
@@ -124,6 +127,30 @@ def test_hicbir_kart_bos_kalmaz():
                     bos.append((kid, w, h, n))
         assert not bos, "boş kalan kartlar (öğe sayısı):\n" + "\n".join(
             f"  {k} {w}x{h}: {n} öğe" for k, w, h, n in bos)
+    finally:
+        kok.destroy()
+
+
+def test_gunluk_karti_journal_eylemi():
+    """journald'a yazan servis satırı 'log_journal' eylemi üretmeli."""
+    import tkinter as tk
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+        kartlar.TIKLANABILIR.clear()
+        kartlar.CIZIM["loglar"](cekim, 10, 10, 360, 260, ORNEK, GECMIS)
+        eylemler = [e[0] for e in kartlar.TIKLANABILIR]
+        assert ("log_journal", "mariadb.service") in eylemler, eylemler
+        assert any(a[0] == "log_dosya" for a in eylemler), eylemler
+        # journal satırında boyut/yaş yerine "journal" yazmalı
+        metinler = [c.itemcget(o, "text") for o in c.find_all() if c.type(o) == "text"]
+        assert "journal" in metinler, metinler
     finally:
         kok.destroy()
 

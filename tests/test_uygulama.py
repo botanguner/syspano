@@ -511,6 +511,34 @@ def test_guncelleme_denetim_akisi():
             del os.environ["XDG_STATE_HOME"]
 
 
+def test_gunluk_goruntuleyici_journal_kaynagi():
+    """journald kaynağı (MariaDB gibi) da aynı görüntüleyicide açılmalı."""
+    from syspano.cihaz import loglar as loglar_mod
+    p = _pano_olustur(kartlar=["cpu", "loglar"], guncelleme_denetimi=False)
+    if p is None:
+        return
+    gercek = loglar_mod.gunluk_journal
+    loglar_mod.gunluk_journal = lambda birim, satir=200: (
+        "2026-10-08 21:00:00 mariadb[1]: hazır\n"
+        "2026-10-08 21:01:00 mariadb[1]: ERROR: tablo bozuk\n", "journalctl")
+    try:
+        p.log_ac_journal("mariadb.service", "MariaDB")
+        _bekle(p, 0.6)
+        p.ciz()
+        p.kok.update()
+        assert p.gorunum == "log" and p.log_tip == "journal"
+        assert len(p._log_satirlar()) == 2, p._log_satirlar()
+        assert p.log_ozet["hata"] == 1, p.log_ozet
+        metinler = [p.c.itemcget(o, "text") for o in p.c.find_all()
+                    if p.c.type(o) == "text"]
+        assert "MariaDB" in metinler, "okunur ad başlıkta yok"
+        assert any("mariadb.service" in m for m in metinler), "birim adı yok"
+        p.gorunum_degistir("pano")
+    finally:
+        loglar_mod.gunluk_journal = gercek
+        p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback
