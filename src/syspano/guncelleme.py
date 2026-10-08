@@ -130,6 +130,27 @@ def _git_deposu(yol):
     return bool(yol) and os.path.isdir(os.path.join(yol, ".git"))
 
 
+def _depo_surumu(kaynak):
+    """Klondaki paketin sürümü (`src/syspano/__init__.py`).
+
+    Kurulu paket ile depodaki kod farklı olabilir: `git pull` ile depo
+    ilerletilmiş ama `pip install` çalıştırılmamışsa `syspano --surum` eski
+    sürümü gösterir. Bu ayrımı yakalamak için depo sürümü ayrıca okunur.
+    """
+    if not kaynak:
+        return None
+    yol = os.path.join(kaynak, "src", "syspano", "__init__.py")
+    try:
+        with open(yol) as f:
+            for satir in f:
+                m = re.match(r'__version__\s*=\s*"([^"]+)"', satir.strip())
+                if m:
+                    return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
 def _upstream(kaynak):
     """Klonun takip ettiği uzak dal ('@{u}' varsa o, yoksa origin/HEAD)."""
     kod, cikti = _calistir(["git", "-C", kaynak, "rev-parse", "--abbrev-ref",
@@ -205,6 +226,15 @@ def denetle(url=None):
                         sonuc["uzak"] = etiket
                         if surum_karsilastir(sonuc["uzak"], __version__) > 0:
                             sonuc["yeni"] = True
+
+        # kurulu paket ile depodaki kod aynı mı? (git pull yapılıp kurulmamış olabilir)
+        depo_surum = _depo_surumu(kaynak)
+        sonuc["depo_surum"] = depo_surum
+        if depo_surum and surum_karsilastir(depo_surum, __version__) != 0:
+            sonuc["yeni"] = True
+            sonuc["kurulum_gerekli"] = True
+            sonuc["mesaj"] = (f"depodaki sürüm {depo_surum}, kurulu paket {__version__}"
+                              " — yeniden kurulum gerekli")
 
     else:
         # klon yok: etiketleri uzaktan okuyup sürümü karşılaştır
@@ -308,6 +338,9 @@ def metin_ozet(baslik_genisligi=0):
     son = denetim_oku()
     if not son:
         return "güncelleme durumu bilinmiyor"
+    if son.get("kurulum_gerekli"):
+        return (f"yeniden kurulum gerekli · depo {son.get('depo_surum')} / "
+                f"kurulu {son['yerel']}")
     if son.get("hata"):
         return f"denetlenemedi: {son['hata']}"
     if son.get("yeni"):

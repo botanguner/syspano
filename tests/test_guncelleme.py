@@ -84,8 +84,21 @@ def test_ozet_metni():
                                      "uzak": "v1.0.2"})
             ozet = guncelleme.metin_ozet()
             assert "yeni sürüm" in ozet and "v1.0.2" in ozet
+            guncelleme._denetim_yaz({"zaman": 1, "yeni": True, "yerel": "1.0.0",
+                                     "depo_surum": "1.1.0", "kurulum_gerekli": True})
+            assert "yeniden kurulum" in guncelleme.metin_ozet()
         finally:
             del os.environ["XDG_STATE_HOME"]
+
+
+def test_depo_surumu_okuma():
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, "src", "syspano"))
+        with open(os.path.join(d, "src", "syspano", "__init__.py"), "w") as f:
+            f.write('"""x"""\n__version__ = "3.4.5"\n')
+        assert guncelleme._depo_surumu(d) == "3.4.5"
+    assert guncelleme._depo_surumu(None) is None
+    assert guncelleme._depo_surumu("/yok/boyle/dizin") is None
 
 
 # ─── gerçek git senaryosu ────────────────────────────────────────────────────
@@ -171,7 +184,72 @@ def test_kirli_agacta_guncellemez():
             del os.environ["XDG_STATE_HOME"]
 
 
-def test_kayit_yoksa_yonlendirir():
+def test_guncelle_sh_surum_farkini_yakalar():
+    """`git pull` yapılıp paket kurulmadıysa guncelle.sh bunu görmeli.
+
+    Kullanıcının yaşadığı durum: depo ilerletilmiş ama `pip install`
+    çalıştırılmamış; betik "yeni commit yok" deyip hiçbir şey yapmıyordu.
+    Artık kurulu sürümle depo sürümünü karşılaştırıp yeniden kuruyor.
+    """
+    if not GIT:
+        print("    (git yok — atlandı)")
+        return
+    betik = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "guncelle.sh")
+    if not os.path.exists(betik):
+        print("    (guncelle.sh yok — atlandı)")
+        return
+
+    with tempfile.TemporaryDirectory() as kok:
+        # sahte `syspano`: sürümünü biz belirliyoruz
+        bindir = os.path.join(kok, "bin")
+        os.makedirs(bindir)
+        sahte = os.path.join(bindir, "syspano")
+
+        def surum_ayarla(surum):
+            with open(sahte, "w") as f:
+                f.write(f"#!/bin/sh\necho 'SysPano {surum}'\n")
+            os.chmod(sahte, 0o755)
+
+        # uzak depo + klon
+        uzak = os.path.join(kok, "uzak.git")
+        depo = os.path.join(kok, "depo")
+        subprocess.run([GIT, "init", "--bare", "--initial-branch=main", uzak],
+                       capture_output=True, text=True)
+        os.makedirs(depo)
+        _git("init", "--initial-branch=main", cwd=depo)
+        os.makedirs(os.path.join(depo, "src", "syspano"))
+        with open(os.path.join(depo, "src", "syspano", "__init__.py"), "w") as f:
+            f.write('"""x"""\n__version__ = "1.1.0"\n')
+        shutil.copy2(betik, os.path.join(depo, "guncelle.sh"))
+        os.chmod(os.path.join(depo, "guncelle.sh"), 0o755)
+        _git("add", "-A", cwd=depo)
+        _git("commit", "-m", "surum 1.1.0", cwd=depo)
+        _git("remote", "add", "origin", uzak, cwd=depo)
+        _git("push", "-u", "origin", "main", cwd=depo)
+
+        ortam = dict(os.environ, PATH=bindir + os.pathsep + os.environ["PATH"],
+                     XDG_STATE_HOME=os.path.join(kok, "durum"))
+
+        # 1) kurulu sürüm depoyla aynı → yapılacak bir şey yok
+        surum_ayarla("1.1.0")
+        c = subprocess.run(["./guncelle.sh", "--denetle"], cwd=depo, env=ortam,
+                           capture_output=True, text=True, timeout=60)
+        cikti = c.stdout + c.stderr
+        assert "yapılacak bir şey yok" in cikti, cikti
+        assert c.returncode == 0, cikti
+
+        # 2) kurulu sürüm eski (git pull yapılmış, kurulmamış) → fark bildirilmeli
+        surum_ayarla("1.0.0")
+        c = subprocess.run(["./guncelle.sh", "--denetle"], cwd=depo, env=ortam,
+                           capture_output=True, text=True, timeout=60)
+        cikti = c.stdout + c.stderr
+        assert "farklı" in cikti, cikti
+        assert "1.0.0" in cikti and "1.1.0" in cikti, cikti
+        assert c.returncode == 0, cikti
+
+
+
     with tempfile.TemporaryDirectory() as kok:
         os.environ["XDG_STATE_HOME"] = os.path.join(kok, "durum")
         try:
