@@ -32,8 +32,8 @@ tepsi = ["PySide6>=6.4"]
 syspano = "syspano.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/ornek/syspano"
-Kaynak = "https://github.com/ornek/syspano"
+Homepage = "https://github.com/botanguner/syspano"
+Kaynak = "https://github.com/botanguner/syspano"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

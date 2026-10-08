@@ -51,7 +51,7 @@ SysPano donanımı tahmin etmez, **ne varsa onu bulur** ve olmayan kartı gizler
 ### 1. Tek komutla (önerilen)
 
 ```bash
-git clone https://github.com/ornek/syspano.git
+git clone https://github.com/botanguner/syspano.git
 cd syspano
 ./install.sh
 ```
