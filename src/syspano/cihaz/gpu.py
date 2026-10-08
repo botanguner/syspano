@@ -1,20 +1,22 @@
 """GPU: Intel, AMD, NVIDIA ve Raspberry Pi (VideoCore) desteklenir.
 
-Her üretici için farklı sysfs düğümleri vardır:
-
 | Üretici | Kullanım | Frekans | Sıcaklık |
 |---|---|---|---|
-| Intel   | RC6 sayacı farkı | `gt_cur_freq_mhz` | hwmon (coretemp/pch) |
+| Intel   | RC6 sayacı farkı | `gt_cur_freq_mhz` | hwmon |
 | AMD     | `gpu_busy_percent` | `pp_dpm_sclk` | `device/hwmon/*/temp1_input` |
 | NVIDIA  | `nvidia-smi` | `clocks.sm` | `nvidia-smi` |
 | VideoCore (Pi) | — | `v3d` saati | `vcgencmd measure_temp` |
 
-Hiçbir GPU bulunamazsa `{"yok": True}` döner ve arayüz GPU kartını gizler.
+**Performans:** hangi kartların var olduğu ve okunacak dosya yolları **bir kez**
+bulunur (`_kart_bul`), her ölçümde yalnızca o dosyalar okunur. `which()` sonucu
+ve `vcgencmd` çıktısı önbelleğe alınır; `vcgencmd`/`nvidia-smi` gibi süreç
+başlatan çağrılar 2–3 saniyede bire seyreltilir.
 """
 
 import glob
 import os
 import re
+import shutil
 import subprocess
 
 from . import ortak
@@ -25,71 +27,106 @@ _URETICI = {
 }
 _ATLA = ("vkms", "vgem", "simpledrm", "virtio_gpu")
 
+KART_OMRU = 60.0        # saniye; sysfs kart listesi bu sürede bir taranır
+VCGENCMD_ARALIK = 3.0   # saniye; vcgencmd süreç başlatır
+NVIDIA_BOSTA_ARALIK = 2.0    # saniye; nvidia-smi ~30 ms sürer, boştayken seyrek sor
+NVIDIA_AKTIF_ARALIK = 1.0    # kart çalışırken her saniye
+NVIDIA_SUREC_ARALIK = 6.0    # saniye; süreç listesi daha da yavaş değişir
 
-def _surucu(yol):
-    try:
-        return os.path.basename(os.path.realpath(f"{yol}/device/driver"))
-    except Exception:
-        return ""
-
-
-def _uretim(yol):
-    v = ortak.oku(f"{yol}/device/vendor")
-    return _URETICI.get(v, "GPU")
+_komut_onbellek = {}
 
 
-def gpu_kartlari(d):
-    """Sysfs'ten bulunan GPU kartları (Intel/AMD/VideoCore)."""
+def ortam_komut(ad):
+    """`which` sonucu önbelleğe alınır (her saniye PATH taranmasın)."""
+    var = _komut_onbellek.get(ad)
+    if var is None:
+        var = shutil.which(ad) is not None
+        _komut_onbellek[ad] = var
+    return var
+
+
+# ─── kart keşfi (bir kez) ────────────────────────────────────────────────────
+def _kart_bul():
+    """Sysfs'ten GPU kartlarını ve okunacak dosya yollarını bulur."""
     kartlar = []
-    for giris in sorted(os.listdir("/sys/class/drm")):
-        m = re.fullmatch(r"card(\d+)", giris)
-        if not m:
+    try:
+        girdiler = sorted(os.listdir("/sys/class/drm"))
+    except Exception:
+        return kartlar
+    for giris in girdiler:
+        if not re.fullmatch(r"card(\d+)", giris):
             continue
         yol = f"/sys/class/drm/{giris}"
-        surucu = _surucu(yol)
+        try:
+            surucu = os.path.basename(os.path.realpath(f"{yol}/device/driver"))
+        except Exception:
+            surucu = ""
         if surucu in _ATLA:
             continue
-        uretim = _uretim(yol)
-        kart = {"ad": giris, "surucu": surucu, "uretim": uretim,
-                "kullanim": None, "mhz": 0.0, "maks_mhz": 0.0, "sicaklik": 0.0}
+        uretim = _URETICI.get(ortak.oku(f"{yol}/device/vendor"), "GPU")
+
+        k = {"ad": giris, "surucu": surucu, "uretim": uretim,
+             "tur": "diger", "kullanim_dosya": None, "mhz_dosya": None,
+             "maks_dosya": None, "rc6_dosya": None, "sicaklik_dosya": None,
+             "bellek_dosya": None}
 
         if uretim == "AMD":
-            kart["kullanim"] = ortak.oku_sayi(f"{yol}/device/gpu_busy_percent", -1)
-            if kart["kullanim"] < 0:
-                kart["kullanim"] = None
-            kart["bellek_yuzde"] = ortak.oku_sayi(f"{yol}/device/mem_busy_percent", -1)
-            mhz = re.search(r"(\d+)Mhz", ortak.oku(f"{yol}/device/pp_dpm_sclk", "") or "")
-            if mhz:
-                kart["mhz"] = float(mhz.group(1))
+            k["tur"] = "amd"
+            k["kullanim_dosya"] = f"{yol}/device/gpu_busy_percent"
+            k["bellek_dosya"] = f"{yol}/device/mem_busy_percent"
+            k["sclk_dosya"] = f"{yol}/device/pp_dpm_sclk"
             hw = glob.glob(f"{yol}/device/hwmon/hwmon*/temp1_input")
-            if hw:
-                kart["sicaklik"] = ortak.oku_sayi(hw[0], 0) / 1000.0
-            kart["model"] = f"AMD {surucu}"
+            k["sicaklik_dosya"] = hw[0] if hw else None
+            k["model"] = f"AMD {surucu}"
         elif uretim == "Intel" or os.path.exists(f"{yol}/gt_cur_freq_mhz"):
-            kart["uretim"] = uretim if uretim == "Intel" else (uretim or "Intel")
-            kart["mhz"] = ortak.oku_sayi(f"{yol}/gt_cur_freq_mhz")
-            kart["maks_mhz"] = (ortak.oku_sayi(f"{yol}/gt_RP0_freq_mhz")
-                                or ortak.oku_sayi(f"{yol}/gt_max_freq_mhz"))
-            rc6 = ortak.oku_sayi(f"{yol}/power/rc6_residency_ms", -1)
-            kart["kullanim"] = _rc6_mesgul(d, giris, rc6)
-            kart["model"] = f"Intel {surucu}"
+            k["tur"] = "intel"
+            k["uretim"] = uretim if uretim == "Intel" else (uretim or "Intel")
+            k["mhz_dosya"] = f"{yol}/gt_cur_freq_mhz"
+            for aday in (f"{yol}/gt_RP0_freq_mhz", f"{yol}/gt_max_freq_mhz"):
+                if os.path.exists(aday):
+                    k["maks_dosya"] = aday
+                    break
+            k["rc6_dosya"] = f"{yol}/power/rc6_residency_ms"
+            k["model"] = f"Intel {surucu}"
         else:
-            # bilinmeyen: devfreq ya da gt_* varsa kullan
-            mhz = ortak.oku_sayi(f"{yol}/gt_cur_freq_mhz")
-            if mhz:
-                kart["mhz"] = mhz
-            kart["model"] = f"{uretim or 'GPU'} {surucu}".strip()
+            mhz = f"{yol}/gt_cur_freq_mhz"
+            if os.path.exists(mhz):
+                k["mhz_dosya"] = mhz
+            k["model"] = f"{uretim} {surucu}".strip()
 
-        # kartı gerçek sayanlar
-        if kart["mhz"] or kart["kullanim"] is not None or kart["sicaklik"]:
-            kartlar.append(kart)
-
-    # Raspberry Pi / VideoCore
-    if ortam_komut("vcgencmd"):
-        v = _vcgencmd()
-        if v:
-            kartlar.append(v)
+        # gerçek bir kart mı? (yolu olan bir şey olmalı)
+        if any(k[x] for x in ("kullanim_dosya", "mhz_dosya", "sicaklik_dosya")):
+            kartlar.append(k)
     return kartlar
+
+
+def _kart_degerleri(k, d):
+    """Önbellekteki yollardan anlık değerleri okur."""
+    sonuc = {"ad": k["ad"], "surucu": k["surucu"], "uretim": k["uretim"],
+             "model": k.get("model", k["uretim"]), "kullanim": None,
+             "mhz": 0.0, "maks_mhz": 0.0, "sicaklik": 0.0}
+    if k["tur"] == "amd":
+        deger = ortak.oku_sayi(k["kullanim_dosya"], -1)
+        sonuc["kullanim"] = deger if deger >= 0 else None
+        sonuc["bellek_yuzde"] = ortak.oku_sayi(k["bellek_dosya"], -1)
+        if k["sicaklik_dosya"]:
+            sonuc["sicaklik"] = ortak.oku_sayi(k["sicaklik_dosya"], 0) / 1000.0
+        metin = ortak.oku(k.get("sclk_dosya"), "") or ""
+        for satir in metin.splitlines():          # '*' işaretli satır = geçerli saat
+            if "*" in satir:
+                esle = re.search(r"(\d+)Mhz", satir)
+                if esle:
+                    sonuc["mhz"] = float(esle.group(1))
+                break
+    elif k["tur"] == "intel":
+        sonuc["mhz"] = ortak.oku_sayi(k["mhz_dosya"])
+        sonuc["maks_mhz"] = ortak.oku_sayi(k["maks_dosya"]) if k["maks_dosya"] else 0.0
+        rc6 = ortak.oku_sayi(k["rc6_dosya"], -1) if k["rc6_dosya"] else -1
+        sonuc["kullanim"] = _rc6_mesgul(d, k["ad"], rc6)
+    else:
+        if k["mhz_dosya"]:
+            sonuc["mhz"] = ortak.oku_sayi(k["mhz_dosya"])
+    return sonuc
 
 
 def _rc6_mesgul(d, ad, rc6):
@@ -106,12 +143,22 @@ def _rc6_mesgul(d, ad, rc6):
     return mesgul
 
 
-def ortam_komut(ad):
-    import shutil
-    return shutil.which(ad) is not None
+def gpu_kartlari(d):
+    simdi = ortak.zaman()
+    onbellek = d.gpu_kart_onbellek
+    if onbellek is None or simdi - d.gpu_kart_zaman > KART_OMRU:
+        onbellek = d.gpu_kart_onbellek = _kart_bul()
+        d.gpu_kart_zaman = simdi
+    return [_kart_degerleri(k, d) for k in onbellek]
 
 
-def _vcgencmd():
+# ─── Raspberry Pi / VideoCore ────────────────────────────────────────────────
+def _vcgencmd(d):
+    """`vcgencmd` süreç başlatır; sonuç VCGENCMD_ARALIK boyunca saklanır."""
+    simdi = ortak.zaman()
+    if d.vcgencmd_sonuc is not None and simdi - d.vcgencmd_zaman < VCGENCMD_ARALIK:
+        return d.vcgencmd_sonuc
+    sonuc = None
     try:
         mhz = subprocess.run(["vcgencmd", "measure_clock", "v3d"],
                              capture_output=True, text=True, timeout=3).stdout
@@ -119,14 +166,17 @@ def _vcgencmd():
                            capture_output=True, text=True, timeout=3).stdout
         m = re.search(r"=(\d+)", mhz)
         tt = re.search(r"([\d.]+)", t)
-        return {"ad": "v3d", "surucu": "v3d", "uretim": "Broadcom",
-                "kullanim": None,
-                "mhz": (int(m.group(1)) / 1e6) if m else 0.0,
-                "maks_mhz": 0.0,
-                "sicaklik": float(tt.group(1)) if tt else 0.0,
-                "model": "VideoCore (RPi)"}
+        sonuc = {"ad": "v3d", "surucu": "v3d", "uretim": "Broadcom",
+                 "kullanim": None,
+                 "mhz": (int(m.group(1)) / 1e6) if m else 0.0,
+                 "maks_mhz": 0.0,
+                 "sicaklik": float(tt.group(1)) if tt else 0.0,
+                 "model": "VideoCore (RPi)"}
     except Exception:
-        return None
+        sonuc = None
+    d.vcgencmd_sonuc = sonuc
+    d.vcgencmd_zaman = simdi
+    return sonuc
 
 
 # ─── NVIDIA (nvidia-smi) ─────────────────────────────────────────────────────
@@ -134,11 +184,9 @@ def nvidia_oku(d):
     """NVIDIA'nın gerçek durumunu okur; yoksa None.
 
     Anlık kullanım çoğu zaman %0 olduğu için son 30 saniyenin tepesi ve pstate
-    (P8 boşta, P0 tam hız) de tutulur. kartta açık tutulan küçük 'tutamak'
+    (P8 boşta, P0 tam hız) de tutulur. Kartta açık tutulan küçük 'tutamak'
     süreçleri (>= 8 MiB) sayılmaz.
     """
-    if not ortam_komut("nvidia-smi"):
-        return None
     simdi = ortak.zaman()
     alanlar = ("utilization.gpu,utilization.memory,memory.used,memory.total,"
                "temperature.gpu,power.draw,pstate,clocks.sm,name")
@@ -154,7 +202,7 @@ def nvidia_oku(d):
     if len(p) < 9:
         return None
 
-    if simdi - d.nvidia_surec_zaman >= 3.0:
+    if simdi - d.nvidia_surec_zaman >= NVIDIA_SUREC_ARALIK:
         d.nvidia_surec_zaman = simdi
         kul = []
         try:
@@ -192,16 +240,26 @@ def nvidia_oku(d):
 
 def oku(d, ayar):
     kartlar = gpu_kartlari(d)
+    if ortam_komut("vcgencmd"):
+        v = _vcgencmd(d)
+        if v:
+            kartlar.append(v)
+
     if ortam_komut("nvidia-smi"):
         simdi = ortak.zaman()
-        if simdi - d.nvidia_zaman >= 1.0:
+        # nvidia-smi her çağrıda bir süreç başlatır (~30 ms). Kart boştayken
+        # seyrek sorulur; çalışırken saniyede bir. Kısa yükler 30 sn'lik tepe
+        # mantığıyla yine yakalanır.
+        durum = (d.nvidia or {}).get("durum")
+        aralik = (NVIDIA_AKTIF_ARALIK if durum and durum != "boşta"
+                  else NVIDIA_BOSTA_ARALIK)
+        if simdi - d.nvidia_zaman >= aralik:
             d.nvidia_zaman = simdi
             d.nvidia = nvidia_oku(d)
     else:
         d.nvidia = None
 
-    nv = d.nvidia
-    sonuc = {"kartlar": kartlar, "nvidia": nv}
-    if not kartlar and not nv:
+    sonuc = {"kartlar": kartlar, "nvidia": d.nvidia}
+    if not kartlar and not d.nvidia:
         sonuc["yok"] = True
     return sonuc

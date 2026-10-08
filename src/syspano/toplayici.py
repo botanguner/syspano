@@ -25,6 +25,10 @@ class Toplayici:
         self.ac_dugum = None
         self.pil_arandi = False
         self.rc6_onceki = {}
+        self.gpu_kart_onbellek = None
+        self.gpu_kart_zaman = 0.0
+        self.vcgencmd_sonuc = None
+        self.vcgencmd_zaman = 0.0
         self.nvidia = None
         self.nvidia_zaman = 0.0
         self.nvidia_tepe = 0.0
@@ -39,6 +43,9 @@ class Toplayici:
         self.ag_arayuz = None
         self.ag_arandi = False
         self.surec_onceki = None
+        self.surec_sonuc = {}
+        self.surec_son = 0.0
+        self.sicaklik_haritasi = None
         self.yedek_zaman = 0.0
         self.yedek_sonraki = ""
         self.sistem_arandi = False

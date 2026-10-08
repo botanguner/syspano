@@ -122,17 +122,19 @@ class Cekim:
     def kaydir_ayarla(self, piksel):
         self.kaydir = piksel
 
-    def _et(self):
-        return (self._etiket,) if self._etiket else ()
-
     def etiket(self, ad):
-        """Sonraki çizimlere konacak tuval etiketi.
+        """Sonraki çizimlere konacak tuval etiketi (metin ya da demet).
 
-        Kaydırma sırasında içeriği `canvas.move` ile taşıyabilmek için gerekir:
-        içerik öğeleri 'icerik' etiketiyle, üst şerit ve çubuklar etiketsiz
-        çizilir, böylece yalnızca içerik hareket eder.
+        Kaydırma sırasında içeriği `canvas.move` ile taşıyabilmek için gerekir.
+        Bir kare hem "kare" (tüm kare) hem "icerik" (kaydırılan bölüm) etiketini
+        alabilir; bu yüzden demet desteklenir.
         """
         self._etiket = ad
+
+    def _et(self):
+        if not self._etiket:
+            return ()
+        return self._etiket if isinstance(self._etiket, tuple) else (self._etiket,)
 
     def _gorunur(self, x0, y0, x1, y1):
         if not self._kirp:

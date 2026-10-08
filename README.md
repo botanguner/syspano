@@ -434,6 +434,7 @@ flowchart TD
 | `src/syspano/arayuz/yerlesim.py` | **Saf** uyarlanabilir yerleşim (Tk'sız, test edilebilir) |
 | `src/syspano/arayuz/ayar_ekrani.py` | **Saf** ayar ekranı yerleşimi + dokunmatik denetimler |
 | `src/syspano/guncelleme.py` | Kurulum kaydı, sürüm denetimi, `git pull` + yeniden kurulum |
+| `arac/olcum.py` | Kaynak profili: modül modül süreler, çizim karesi, kaydırma maliyeti |
 | `install.sh` / `guncelle.sh` / `uninstall.sh` | Kur, güncelle, kaldır (apt/dnf/pacman/zypper tanır) |
 | `src/syspano/arayuz/kartlar.py` | Kart çizicileri (dikdörtgene uyarlanır) |
 | `src/syspano/arayuz/cekim.py` | Tasarım→piksel dönüşümü, kaydırma, büyüteç kırpması |
@@ -457,12 +458,14 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | `test_kartlar.py` | Her kart 10 boyutta çizilir, hiçbir öğe kartın dışına çıkmaz |
 | `test_geometri.py` | Büyüteç kırpma matematikleri (çokgen ve parça kırpma) |
 | `test_ekran.py` | `xrandr` ayrıştırma, DPI hesabı, hedef ekran seçimi |
-| `test_cihaz.py` | Toplayıcılar gerçek donanımda çökmeden veri üretiyor mu |
+| `test_cihaz.py` | Toplayıcılar gerçek donanımda çökmeden veri üretiyor mu; **seyreltme ve önbellekler** (süreç taraması 3 sn, yavaş sensör, sensör haritası, GPU kart listesi, `which`) |
 | `test_ortam.py` | Fare/dokunmatik ayrımı (girdi aygıtları) ve büyüteç kararı |
 | `test_ayar.py` | Yapılandırma; varsayılanların dosyaya düşmemesi |
 | `test_ayar_ekrani.py` | Ayar ekranı yerleşimi: çakışma yok, dokunma hedefleri yeterli, çizim ölçeğe uyuyor, isabet denetimi |
 | `test_guncelleme.py` | Sürüm karşılaştırma, kurulum kaydı ve **gerçek git senaryosuyla** güncelleme |
-| `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi ve ayar ekranında dokunma çalışır |
+| `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi, ayar ekranında dokunma; **kare öğeleri birikmiyor**, çizim döngüsü çoğalmıyor, gizliyken çizilmiyor |
+
+Toplam **10 dosyada 79 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -470,6 +473,62 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 ./run.sh --pencere 1400x900 --olcek 0.94     # 4 sütunlu tam pano
 ./run.sh --pencere 620x380 --olcek 0.7       # küçük ekran taklidi
 ```
+
+## Performans
+
+Pano her saniye ölçüp çizer; amaç bu işi olabildiğince ucuza yapmak. Ölçüm
+aracıyla alınan sonuçlar (14" dizüstü, 1400×880 pencere):
+
+| Ölçüm | Önce | Sonra |
+|---|---|---|
+| **Toplam (pano modu)** | ~%5,0 çekirdek · 50 ms/sn | **%2,35 · 23,5 ms/sn** |
+| Toplayıcı (11 modül) | 39,5 ms/sn | **21,7 ms/sn** |
+| Çizim karesi | 20,6 ms | **3,6 ms** |
+| Pencere gizliyken (tepsiden) | ~%5 | **%1,6** |
+
+En büyük üç kazanç:
+
+**1. Kare değiştirme (5,8×).** Tk'de `delete("all")` sonrası öğe oluşturmak, her
+öğe için "hasarlı bölge" hesabı yüzünden çok pahalıdır. Pano artık yeni kareyi
+**eskisi henüz tuvalde dururken** çiziyor, sonra eskisini siliyor
+(`KARE` / `KARE_YENI` etiketleri). Aynı ölçümde 23,6 ms → 2,8 ms.
+
+**2. Uyarlanabilir sensör seyreltmesi.** Sensör başına okuma maliyeti
+farkeder: `coretemp` 0,04 ms, ama NVMe sıcaklığı **9,25 ms** (her okumada diske
+SMART komutu) ve kablosuz kartı 1,0 ms. Harita kurulurken her sensörün maliyeti
+ölçülür ve yavaş olanlar seyreltilir:
+
+| Okuma maliyeti | Aralık |
+|---|---|
+| < 0,3 ms | her ölçüm (1 sn) |
+| 0,3 – 2 ms | 5 saniyede bir |
+| ≥ 2 ms | 10 saniyede bir |
+
+Bu tek değişiklik "sıcaklık" modülünü **9,9 ms → 0,6 ms**'ye indirdi.
+
+**3. Nadiren değişen şeyleri önbelleğe almak.** GPU kart listesi ve sysfs
+yolları 60 sn'de bir taranır; `which()` sonucu saklanır; süreç listesi
+(`/proc` taraması, 8 ms) 3 sn'de bir; `nvidia-smi` (~30 ms, süreç başlatır)
+kart boştayken 2 sn'de bir; `vcgencmd` 3 sn'de bir. Seyreltilen değerler arada
+son okunan değeri gösterir.
+
+Ayrıca pencere gizliyken (tepsiden saklandığında) hiç çizim yapılmaz, büyüteç
+kapalıyken bekçi zamanlayıcısı 4 kat seyrek çalışır.
+
+Kullanıcı tarafındaki en etkili ayar **güncelleme aralığı**dır
+(⚙ → Güncelleme): 1 sn yerine 2 sn seçmek CPU'yu yarıya indirir.
+
+### Ölçüm
+
+```bash
+python3 arac/olcum.py             # üretim temposunda modül modül (22 sn)
+python3 arac/olcum.py --cizim     # çizim karesi ve kaydırma maliyeti de
+python3 arac/olcum.py --hizli     # modülleri art arda (seyreltme görünmez)
+```
+
+> [!NOTE]
+> Mutlak süreler cihaza göre değişir: Raspberry Pi 4, bu dizüstünden yaklaşık
+> 3–4 kat yavaştır, ama oranlar aynıdır ve seyreltme mantığı orada da geçerlidir.
 
 ## Sorun giderme
 
