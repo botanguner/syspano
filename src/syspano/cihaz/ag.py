@@ -1,4 +1,10 @@
-"""Ağ: varsayılan arayüz üzerinden indirme/yükleme hızı, yerel IP, Wi-Fi sinyali."""
+"""Ağ: varsayılan arayüz üzerinden indirme/yükleme hızı, yerel IP, arayüz türü.
+
+**Performans notu:** Wi-Fi sinyal gücünü okumak (`/proc/net/wireless`) Raspberry
+Pi'de **~1,8 ms** sürüyor — Wi-Fi sürücüsü her okumada firmware'e soruyor ve bu
+değer arayüzde hiç gösterilmiyordu. Bu yüzden okuma kaldırıldı; sinyal göstermek
+istenirse yavaş sensörlerdeki gibi seyreltilerek eklenmelidir.
+"""
 
 import fcntl
 import os
@@ -53,19 +59,6 @@ def _ip(arayuz):
         s.close()
 
 
-def _wifi_sinyal(arayuz):
-    """Wi-Fi ise sinyal gücü (dBm / %). /proc/net/wireless'tan."""
-    try:
-        with open("/proc/net/wireless") as f:
-            for satir in f.readlines()[2:]:
-                p = satir.split()
-                if p and p[0].rstrip(":") == arayuz:
-                    return {"sinyal": float(p[2].rstrip(".")), "gurultu": float(p[3].rstrip("."))}
-    except Exception:
-        pass
-    return None
-
-
 def oku(d, ayar):
     if not d.ag_arandi:
         d.ag_arayuz = _varsayilan_arayuz()
@@ -97,6 +90,5 @@ def oku(d, ayar):
         "toplam_in": rx, "toplam_out": tx,
         "ip": _ip(arayuz),
         "tur": tur,
-        "sinyal": _wifi_sinyal(arayuz) if tur == "wifi" else None,
         "hiz": ortak.oku_sayi(f"/sys/class/net/{arayuz}/speed", 0),
     }

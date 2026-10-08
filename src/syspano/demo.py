@@ -132,7 +132,6 @@ class DemoToplayici:
                 "arayuz": "wlan0", "inen": ag_in, "giden": ag_out,
                 "ip": "192.0.2.10",          # RFC 5737: belgeleme için ayrılmış
                 "tur": "wifi", "hiz": 866,
-                "sinyal": {"sinyal": -58.0, "gurultu": -92.0},
             },
             "surecler": {"liste": surecler, "toplam": 214, "olcum_sn": 3.0},
             "guc": {"tur": "RAPL", "pl1": 15, "pl2": 25, "governor": "powersave"},

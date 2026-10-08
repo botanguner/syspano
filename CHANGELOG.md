@@ -3,6 +3,16 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.3.1] — 2026-10-08
+
+### Düzeltildi
+- **Ağ modülündeki kullanılmayan Wi-Fi sinyal okuması kaldırıldı.**
+  `/proc/net/wireless` Raspberry Pi'de **~1,8 ms** sürüyor (Wi-Fi sürücüsü her
+  okumada firmware'e soruyor — NVMe sıcaklığındaki durumun aynısı) ve dönen
+  değer arayüzde **hiç gösterilmiyordu**; yani saniyede bir boşuna yapılan bir
+  işti. Pi'de ölçüldü: ağ `oku()` çağrısı ~2,5 ms'den ~0,2 ms'ye indi.
+  Sinyal göstermek istenirse yavaş sensörlerdeki gibi seyreltilerek eklenmeli.
+
 ## [1.3.0] — 2026-10-08
 
 ### Eklendi
