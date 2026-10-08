@@ -241,6 +241,55 @@ def test_suz_yalniz_hata_ve_uyari_birakir():
     assert L.suz(metin, False) == metin
 
 
+def test_ozet_journal_zaman_penceresi():
+    """journald sayımı son N dakikaya göre yapılmalı (--since ile)."""
+    from syspano.cihaz import servisler as S
+    cagrilar = []
+
+    def sahte(cmd, zaman=10):
+        cagrilar.append(list(cmd))
+        return 0, "\n".join([
+            "2026-10-08 23:00:00 mariadbd[1]: ready for connections",
+            "2026-10-08 23:00:01 mariadbd[1]: ERROR: tablo bozuk",
+            "2026-10-08 23:00:02 mariadbd[1]: [Warning] access denied",
+        ])
+
+    gercek = S._calistir
+    S._calistir = sahte
+    try:
+        o = L.ozet_journal("mariadb.service", 15)
+    finally:
+        S._calistir = gercek
+    assert o == {"hata": 1, "uyari": 1, "satir": 3, "pencere_dk": 15}, o
+    komut = cagrilar[0]
+    assert "--since" in komut and "-15min" in komut, komut
+    assert "-u" in komut and "mariadb.service" in komut, komut
+
+
+def test_ozet_journal_cekirdek_ve_varsayilan_pencere():
+    from syspano.cihaz import servisler as S
+    cagrilar = []
+    gercek = S._calistir
+    S._calistir = lambda cmd, zaman=10: (cagrilar.append(list(cmd)), (0, "bir hata"))[1]
+    try:
+        o = L.ozet_journal(L.CEKIRDEK_BIRIMI)
+    finally:
+        S._calistir = gercek
+    assert o["pencere_dk"] == L.VARSAYILAN_PENCERE_DK == 60
+    assert "-k" in cagrilar[0] and "-u" not in cagrilar[0], cagrilar[0]
+
+
+def test_ozet_journal_hata_durumunda_sifir_doner():
+    from syspano.cihaz import servisler as S
+    gercek = S._calistir
+    S._calistir = lambda cmd, zaman=10: (1, "")
+    try:
+        o = L.ozet_journal("yok.service", 60)
+    finally:
+        S._calistir = gercek
+    assert o["hata"] == 0 and o["uyari"] == 0 and o.get("hata_mesaji")
+
+
 # ─── toplayıcı arayüzü (önbellek) ────────────────────────────────────────────
 def _durum():
     return SimpleNamespace(log_kaynaklar=None, log_kesif=0.0, log_son=0.0, log_sonuc={})

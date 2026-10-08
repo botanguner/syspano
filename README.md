@@ -147,6 +147,7 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--log-kaynaklar` | Bulunan günlük dosyalarını listele (Apache, PHP, Laravel…) — son satırlarındaki hata/uyarı sayısıyla |
 | `--log-dosya YOL` | Bir günlük dosyasının sonunu yazdır (`--log-dosya /var/log/php8.2-fpm.log`) |
 | `--log-hata` | `--log`/`--log-dosya` çıktısında yalnızca hata ve uyarı satırları |
+| `--log-pencere DK` | journald kaynaklarında hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk) |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -339,6 +340,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "servisler": [],
   "servis_log_dosyalari": {},
   "log_dosyalari": [],
+  "log_pencere_dk": 60,
   "servis_aralik": 30,
   "servis_log_satir": 200,
   "uygulama_basligi": "SysPano"
@@ -513,7 +515,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **14 dosyada 138 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **14 dosyada 141 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -668,7 +670,15 @@ kaybolmazsınız. Komut satırından da aynı günlükler:
 syspano --log-kaynaklar                    # bulunan dosyalar + hata/uyarı sayısı
 syspano --log-dosya /var/log/php8.2-fpm.log --log-satir 500
 syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hatalar
+syspano --log mariadb --log-pencere 15     # son 15 dakikanın hata/uyarı sayısı
 ```
+
+**Sayım ölçütü zaman penceresidir (journald):** "son 200 satır" yanıltıcı
+olabiliyordu — sakin bir günlükte aylar önceki açılış hataları hâlâ o pencerede
+kalıp "8 hata" gösteriyordu (Raspberry Pi'de MariaDB'de görüldü). Bu yüzden
+journald kaynaklarında hata/uyarı sayısı **son 60 dakikaya** göre hesaplanır
+(`log_pencere_dk` ya da `--log-pencere`). Dosya kaynaklarında zaman damgası
+garantisi olmadığı için son satırlar kullanılır.
 
 > [!NOTE]
 > **Maliyet yine ölçüldü:** dosya keşfi (`glob` + `stat`) dizüstünde **~1 ms**,
@@ -690,7 +700,7 @@ syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hata
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 138 test / 14 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 141 test / 14 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

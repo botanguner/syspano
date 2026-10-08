@@ -92,6 +92,7 @@ class Pano:
         self.log_birim = None
         self.log_tip = "birim"                # "birim" (systemd) | "dosya" (log dosyası) | "journal"
         self.log_etiketi = None               # journal kaynaklarında okunur ad
+        self.log_pencere_ozet = None          # journal: son N dakikanın hata/uyarı sayısı
         self.log_ozet = {"hata": 0, "uyari": 0}
         self.log_suz = False                  # yalnızca hata/uyarı satırları
         self.log_metin = ""
@@ -473,12 +474,20 @@ class Pano:
         try:
             if self.log_tip == "dosya":
                 metin, kaynak = loglar_modul.gunluk(self.log_birim, satir)
+                self.log_pencere_ozet = None
             elif self.log_tip == "journal":
                 metin, kaynak = loglar_modul.gunluk_journal(self.log_birim, satir)
+                # zaman penceresine göre hata/uyarı: son 200 satırdaki eski
+                # hatalar yanıltmasın (Pi'de MariaDB'de görüldü)
+                self.log_pencere_ozet = loglar_modul.ozet_journal(
+                    self.log_birim, self.ayarlar.get("log_pencere_dk")
+                    or loglar_modul.VARSAYILAN_PENCERE_DK)
             else:
                 metin, kaynak = servis_modul.gunluk(self.log_birim, satir, self.ayarlar)
+                self.log_pencere_ozet = None
         except Exception as hata:
             metin, kaynak = f"(günlük okunamadı: {hata})", "hata"
+            self.log_pencere_ozet = None
         self.log_metin = metin
         self.log_kaynak = kaynak
         self.log_ozet = loglar_modul.ozet(metin)
@@ -503,13 +512,18 @@ class Pano:
         c.yazi(x0, yb, baslik, 12, R["mavi"], True)
         yas = int(time.monotonic() - self.log_zaman) if self.log_zaman else 0
         ozet = self.log_ozet or {}
-        ayrinti = (f"{self.log_kaynak} · {yas} sn önce")
-        if ozet.get("hata") or ozet.get("uyari"):
-            ayrinti += f" · {ozet.get('hata', 0)} hata · {ozet.get('uyari', 0)} uyarı"
-        if self.log_tip == "dosya":
-            ayrinti = _kirp_yol(self.log_birim, 46) + " · " + ayrinti
-        elif self.log_tip == "journal":
-            ayrinti = f"{self.log_birim} · " + ayrinti
+        p = self.log_pencere_ozet
+        if self.log_tip == "journal" and p:
+            # Zaman penceresi: son 200 satırda aylar önceki hatalar olabilir
+            ayrinti = (f"{self.log_kaynak} · son {p.get('pencere_dk')} dk: "
+                       f"{p.get('hata', 0)} hata · {p.get('uyari', 0)} uyarı "
+                       f"· {self.log_birim} · {yas} sn önce")
+        else:
+            ayrinti = f"{self.log_kaynak} · {yas} sn önce"
+            if ozet.get("hata") or ozet.get("uyari"):
+                ayrinti += f" · {ozet.get('hata', 0)} hata · {ozet.get('uyari', 0)} uyarı"
+            if self.log_tip == "dosya":
+                ayrinti = _kirp_yol(self.log_birim, 46) + " · " + ayrinti
         c.yazi(x0 + self._metin_gen(baslik, 12, True) + 14, yb, ayrinti, 10, R["cok_soluk"])
         # süzgeç düğmesi + yenile
         dug = (self.tasarim_g - 14 - 92, yb - 14, 92, 28)

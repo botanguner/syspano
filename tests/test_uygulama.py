@@ -559,6 +559,8 @@ def test_gunluk_goruntuleyici_journal_kaynagi():
         metinler = _metinler(p, "MariaDB")
         assert "MariaDB" in metinler, "okunur ad başlıkta yok"
         assert any("mariadb.service" in m for m in metinler), "birim adı yok"
+        assert any("son 60 dk" in m for m in metinler), \
+            f"zaman penceresi başlıkta yok: {metinler}"
         p.gorunum_degistir("pano")
     finally:
         loglar_mod.gunluk_journal = gercek
