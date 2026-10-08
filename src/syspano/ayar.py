@@ -20,7 +20,9 @@ VARSAYILAN = {
     "tema": "koyu",
     "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek", "gecmis",
                 "gpu", "disk_ag", "surecler", "yedek", "sistem"],
-    "buyutec": True,
+    # true | false | "auto": auto → yalnızca faresinin olduğu, yeterince geniş
+    # ekranlarda açılır (dokunmatik panellerde kendiliğinden kapalı).
+    "buyutec": "auto",
     "fare_ile_kaydirma": True,
     "terminal": True,
     "terminal_yazi": None,      # None → ölçeğe göre; px cinsinden sayı → sabit
@@ -45,6 +47,15 @@ def oku():
     return d
 
 
+def dosya_oku():
+    """Yalnızca dosyadaki değerler (varsayılanlarla birleştirilmez)."""
+    try:
+        with open(yol()) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def yaz(sozluk):
     ortam.emin_ol(ortam.yapilandirma_dizini())
     gecici = yol() + ".tmp"
@@ -52,3 +63,17 @@ def yaz(sozluk):
         json.dump(sozluk, f, indent=2, ensure_ascii=False)
     os.replace(gecici, yol())
     return yol()
+
+
+def guncelle(degisim=None, sil=()):
+    """Var olan dosyayı koruyup yalnızca istenen anahtarları değiştirir.
+
+    Varsayılanları dosyaya yazmadığı için, `"auto"` gibi akıllı bir varsayılan
+    ilk çalıştırmada sabit bir değere dönüşmez.
+    """
+    mevcut = dosya_oku()
+    if degisim:
+        mevcut.update(degisim)
+    for anahtar in sil:
+        mevcut.pop(anahtar, None)
+    return yaz(mevcut)

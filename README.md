@@ -141,7 +141,30 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | ⌤ üst şeritteki düğmeler | Pano ↔ Terminal ↔ Kapat |
 | Fare tekerleği / sürükleme | Panoyu dikey kaydır (içerik ekrana sığmıyorsa) |
 | `Ctrl +` / `Ctrl −` / `Ctrl 0` | Terminal yazı boyutu |
-| İmleci durdurmak | Büyüteç: imlecin altındaki bölge 2,6× büyür |
+| İmleci durdurmak | Büyüteç: imlecin altındaki bölge 2,6× büyür (yalnızca fare varsa) |
+
+### Büyüteç ve dokunmatik ekranlar
+
+Büyüteç yalnızca **fareyle** anlamlıdır: imleci bir yere götürüp durdurursunuz,
+daire orada belirir. Dokunmatik bir panelde fare olmadığı için bu davranış
+ters çalışıyordu — bir dokunuş "imleç durdu" sayılıyor ve daire bir daha
+kaybolmuyordu.
+
+Bu yüzden büyüteç artık **kendiliğinden karar veriyor** (`"buyutec": "auto"`):
+
+| Durum | Sonuç |
+|---|---|
+| Fare ya da dokunmatik yüzey var **ve** ekran yeterince geniş | açık |
+| Yalnız dokunmatik ekran (fare yok) | **kapalı** |
+| Tasarım alanı 640×320'den küçük (7" 800×480 gibi) | **kapalı** |
+| `"buyutec": true` / `--buyutec` | elle açık |
+| `"buyutec": false` / `--buyutec-yok` | elle kapalı |
+
+Ayrıca daire, **imleç gerçekten oynadıktan sonra** belirir; pencere imlecin
+altında açıldığında gelen tek "hayalet" hareket olayı büyüteci açmaz. Panoya
+dokunmak/tıklamak da daireyi kapatır ve yeniden gerçek hareket beklenir.
+Uygulama açılışta hangi kararı verdiğini yazar: `büyüteç : kapalı (fare yok
+(dokunmatik ekran))`.
 
 ## Yapılandırma
 
@@ -158,7 +181,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "tema": "koyu",
   "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek",
               "gecmis", "gpu", "disk_ag", "surecler", "yedek", "sistem"],
-  "buyutec": true,
+  "buyutec": "auto",
   "terminal": true,
   "terminal_yazi": null,
   "tepsi": true,
@@ -319,7 +342,9 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | `test_geometri.py` | Büyüteç kırpma matematikleri (çokgen ve parça kırpma) |
 | `test_ekran.py` | `xrandr` ayrıştırma, DPI hesabı, hedef ekran seçimi |
 | `test_cihaz.py` | Toplayıcılar gerçek donanımda çökmeden veri üretiyor mu |
-| `test_uygulama.py` | Pano kurulur, çizilir, büyüteç ve terminal geçişi çalışır |
+| `test_ortam.py` | Fare/dokunmatik ayrımı (girdi aygıtları) ve büyüteç kararı |
+| `test_ayar.py` | Yapılandırma; varsayılanların dosyaya düşmemesi |
+| `test_uygulama.py` | Pano kurulur, çizilir, büyüteç koşulları ve terminal geçişi çalışır |
 
 Ölçek ve yerleşimi denemek için:
 
@@ -339,6 +364,8 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | Pano görev çubuğunda görünüyor | KDE dışı oturumlarda normaldir; `--pencere` modu yönetilen pencere kullanır |
 | Pil/kart yok | Pil veya sensör yoksa kart gizlenir; normal davranış |
 | Tepsi simgesi çıkmıyor | `pip install PySide6` |
+| Dokunmatik ekranda büyüteç beliriyor/kaybolmuyor | Artık kendiliğinden kapalı (fare yok); zorlamak için `"buyutec": false` ya da `--buyutec-yok` |
+| Fare var ama büyüteç çıkmıyor | Küçük ekranlarda (tasarım alanı < 640×320) kapalı; `--buyutec` ile zorlayın |
 | Çok kart sığmıyor | `--kartlar cpu,bellek,gpu` ile azaltın ya da `--olcek` düşürün |
 
 ## Bağlantılı projeler
