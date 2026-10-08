@@ -541,6 +541,32 @@ python3 arac/olcum.py --hizli     # modülleri art arda (seyreltme görünmez)
 > Mutlak süreler cihaza göre değişir: Raspberry Pi 4, bu dizüstünden yaklaşık
 > 3–4 kat yavaştır, ama oranlar aynıdır ve seyreltme mantığı orada da geçerlidir.
 
+## Katkı ve iş akışı
+
+`main` dalı **korumalıdır**: doğrudan push, force push ve dal silme engellenir.
+Değişiklikler **pull request** ile gelir ve şu kontrollerin geçmesi beklenir:
+
+| Kontrol | Ne yapar |
+|---|---|
+| `Python 3.9` … `3.13` | Birim testleri, beş Python sürümünde |
+| `Arayüz testleri (Xvfb)` | Pano, kartlar, ayar ekranı, dokunma (sanal ekranda) |
+| `Kabuk betikleri` | `bash -n` ile betik sözdizimi |
+| `Analyze (python)`, `Analyze (actions)` | CodeQL güvenlik analizi |
+
+```bash
+git checkout -b kisa-aciklama
+# … değişiklikler …
+./run.sh test                                  # yerelde testleri çalıştır
+git commit -am "Ne değişti"
+git push -u origin kisa-aciklama
+gh pr create --fill && gh pr merge --squash --delete-branch
+```
+
+> [!TIP]
+> Eski bir klonunuz varsa ve `push` reddedilirse: bu koruma normaldir — bir dal
+> açıp PR gönderin. Geçmiş 1.2.1'de yeniden yazıldığı için çok eski bir klon
+> `git fetch && git reset --hard origin/main` isteyebilir.
+
 ## Sorun giderme
 
 | Belirti | Çözüm |
