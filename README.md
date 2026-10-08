@@ -179,14 +179,26 @@ GitHub'dan klonlayıp kuranlar için iki yol var; ikisi de aynı işi yapar.
 
 ```bash
 cd ~/syspano
-./guncelle.sh --denetle     # önce bak: yeni commit var mı?
-./guncelle.sh               # güncelle: git pull + paketi yeniden kur
+./guncelle.sh --denetle     # önce bak: yeni commit/sürüm farkı var mı?
+./guncelle.sh               # güncelle: depoyu ilerlet + paketi yeniden kur
 ```
 
 `guncelle.sh` şunları yapar: uzak depoyu çeker, geride kalan commit'leri listeler,
 yerel değişiklik varsa **durdurur** (`--zorla` ile `git stash` yapıp devam eder),
 `git merge --ff-only` ile ilerletir, `install.sh`'ın yazdığı **kurulum kaydına**
-bakarak paketi aynı yöntemle (pipx / pip --user) yeniden kurar.
+bakarak paketi aynı yöntemle (pipx / pip --user) yeniden kurar ve sonucu doğrular.
+
+> [!IMPORTANT]
+> **`git pull` yapmak kurulumu güncellemez.** Depoyu ilerletmek yeterli değildir;
+> paketin de yeniden kurulması gerekir. Betik bunu bilir: yeni commit olmasa bile
+> **kurulu paket sürümü depodan farklıysa** yeniden kurar. `syspano --surum` hâlâ
+> eski sürümü gösteriyorsa `./guncelle.sh --zorla-kur` çalıştırın.
+
+Kurulu sürümü her zaman elle de doğrulayabilirsiniz:
+
+```bash
+python3 -c "import syspano,sys;print(syspano.__version__, sys.executable)"
+```
 
 Paketin kendi komutları da aynı işi yapar ve SSH'de de çalışır:
 
@@ -472,6 +484,8 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | Tepsi simgesi çıkmıyor | `pip install PySide6` |
 | Dokunmatik ekranda büyüteç beliriyor/kaybolmuyor | Artık kendiliğinden kapalı (fare yok); zorlamak için `"buyutec": false` ya da `--buyutec-yok` |
 | Fare var ama büyüteç çıkmıyor | Küçük ekranlarda (tasarım alanı < 640×320) kapalı; `--buyutec` ile zorlayın |
+| `./guncelle.sh` "yapılacak bir şey yok" diyor ama sürüm eski | 1.1.1'den önceki betiklerde: `git pull` depoyu ilerlettiği için betik yeniden kurmuyordu. `./install.sh` çalıştırın ya da betiği güncelleyip tekrar deneyin (`./guncelle.sh --zorla-kur`) |
+| `syspano --surum` eski sürümü gösteriyor | Paket yeniden kurulmamış: `pipx install --force .` ya da `python3 -m pip install --user --upgrade .`; ardından panoyu/servisi yeniden başlatın |
 | Çok kart sığmıyor | `--kartlar cpu,bellek,gpu` ile azaltın ya da `--olcek` düşürün |
 
 ## Bağlantılı projeler

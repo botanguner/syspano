@@ -3,6 +3,29 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.1.1] — 2026-10-08
+
+### Düzeltildi
+- **`git pull && ./guncelle.sh` paketi hiç kurmuyordu.** `git pull` depoyu zaten
+  ilerlettiği için `guncelle.sh` "yeni commit yok" deyip **yeniden kurulum
+  adımına hiç gelmeden** çıkıyordu; `syspano --surum` eski sürümü göstermeye
+  devam ediyordu. Bu, güncellemenin en doğal kullanım biçimi olduğu için
+  ciddi bir tuzaktı.
+  - Betik artık **depo sürümü ile kurulu paket sürümünü** karşılaştırıyor:
+    yeni commit olmasa bile kurulu paket depodan farklıysa yeniden kuruyor.
+  - Çıktıda her zaman `git` konumu, depo sürümü ve kurulu sürüm yazıyor;
+    kurulum sonrası yeni sürüm doğrulanıyor ve `syspano` PATH'te bulunamazsa
+    alternatif komutlar öneriliyor.
+  - Yeni `--zorla-kur`: sürümler aynı olsa da paketi yeniden kurar.
+- `guncelleme.denetle()`: kurulu paket ile klondaki kod farklıysa bunu
+  "yeniden kurulum gerekli" olarak bildiriyor (`kurulum_gerekli` alanı);
+  `syspano --guncelle-denetle` ve panodaki sürüm satırı bunu gösteriyor.
+
+### Eklendi
+- `tests/test_guncelleme.py`: `guncelle.sh`'ın kendisi sahte bir `syspano` ile
+  sınanıyor — sürümler aynıyken "yapılacak bir şey yok" demeli, kurulu paket
+  eskide kalmışsa farkı bildirmeli.
+
 ## [1.1.0] — 2026-10-08
 
 ### Eklendi
