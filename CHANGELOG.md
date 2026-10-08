@@ -3,6 +3,28 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.4.3] — 2026-10-08
+
+### Düzeltildi
+- **Kısa kartlar boş kalıyordu.** Raspberry Pi'nin 1 sütunlu düzeninde (tasarım
+  uzayı 533×320) **GEÇMİŞ** kartı yalnızca başlığı gösteriyordu: kart, alttaki
+  açıklama satırına (CPU/BELLEK/SICAKLIK) 34 birim ayırıp eğriler için yer
+  kalmayınca hiçbir şey çizmiyordu. Artık **eğriler her zaman çizilir**;
+  açıklama satırı yalnızca yer varsa eklenir (kart 96 birimden kısaysa atlanır).
+  Aynı sorunun GPU kartındaki biçimi de düzeltildi: çok kısa kaldığında yalnızca
+  başlık çiziyordu, artık en azından GPU modelini yazar.
+- Liste kartlarında "+N daha" satırı, kart çok kısaysa **hiç çizilmez** (1.4.2'de
+  yer ayırma eklendi; çok kısa kartta yer de yetmediği için satırların üstüne
+  binmesin diye tamamlandı).
+
+### Eklendi
+- İki yeni kart testi: **"hiçbir kart boş kalmaz"** (her kart en az bir içerik
+  öğesi çizmeli) ve liste kartlarında **"+N daha" çakışması**. Test boyutlarına
+  Pi'nin kısa kart yükseklikleri eklendi (533×72, 360×66 tasarım birimi) —
+  bu boyutlar olmadan iki hata da gözden kaçıyordu. Testler eski kodda
+  `gecmis 533x72: 2 öğe` ve `servisler … '+3 servis daha' ↔ 'nginx'` hatasını
+  veriyor.
+
 ## [1.4.2] — 2026-10-08
 
 ### Düzeltildi
