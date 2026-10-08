@@ -91,6 +91,113 @@ def test_ozet_metni():
             del os.environ["XDG_STATE_HOME"]
 
 
+def test_durum_metni_asamalari():
+    """Ayarlar ekranındaki durum satırı her aşamayı doğru ve net anlatmalı."""
+    import time
+    simdi = 1_800_000_000.0
+    # 1) denetim sürüyor
+    metin, renk = guncelleme.durum_metni(denetim={}, surec={}, simdi=simdi,
+                                         denetim_suruyor=True)
+    assert "Denetleniyor" in metin and renk == "mavi"
+    # 2) güncelleme sürüyor
+    metin, renk = guncelleme.durum_metni(
+        denetim={}, simdi=simdi, baslangic=0,
+        surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "basladi": simdi - 42})
+    assert "sürüyor" in metin and "42 sn" in metin and renk == "mavi"
+    # 3) güncelleme başarıyla bitti → yeniden başlat çağrısı
+    metin, renk = guncelleme.durum_metni(
+        denetim={}, simdi=simdi, baslangic=0,
+        surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "bitti": simdi,
+               "sonuc": 0, "surum": "9.9.9"})
+    assert "tamam" in metin and "9.9.9" in metin and "yeniden başlat" in metin.lower()
+    assert renk == "sari"
+    # 4) güncelleme başarısız
+    metin, renk = guncelleme.durum_metni(
+        denetim={}, simdi=simdi, baslangic=0,
+        surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "bitti": simdi, "sonuc": 1,
+               "mesaj": "pip kurulumu başarısız"})
+    assert "başarısız" in metin and "pip" in metin and renk == "kirmizi"
+    # 5) denetim zaman aşımı
+    metin, renk = guncelleme.durum_metni(denetim={}, surec={}, simdi=simdi,
+                                         zaman_asimi=True, baslangic=0)
+    assert "zaman aşımı" in metin and renk == "kirmizi"
+    # 6) denetim hatası
+    metin, renk = guncelleme.durum_metni(
+        denetim={"zaman": simdi - 10, "hata": "ağ yok"}, surec={}, simdi=simdi,
+        baslangic=0)
+    assert "Denetlenemedi" in metin and "ağ yok" in metin and renk == "kirmizi"
+    # 7) yeni sürüm var
+    metin, renk = guncelleme.durum_metni(
+        denetim={"zaman": simdi - 10, "yeni": True, "depo_surum": "1.9.0"},
+        surec={}, simdi=simdi, baslangic=0)
+    assert "Yeni sürüm var" in metin and "1.9.0" in metin and renk == "sari"
+    # 8) güncel
+    metin, renk = guncelleme.durum_metni(
+        denetim={"zaman": simdi - 600, "yeni": False}, surec={}, simdi=simdi,
+        baslangic=0)
+    assert "Güncel" in metin and "10 dk önce" in metin and renk == "yesil"
+    # 9) hiç denetim yok
+    metin, renk = guncelleme.durum_metni(denetim={}, surec={}, simdi=simdi,
+                                         baslangic=0)
+    assert "bilinmiyor" in metin and renk == "soluk"
+
+
+def test_surec_durumu_gidis_donus():
+    """Pano, arka plandaki güncelleme sürecinin durumunu dosyadan okuyabilmeli."""
+    import time
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["XDG_STATE_HOME"] = d
+        try:
+            assert guncelleme.surec_oku() == {}
+            guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI,
+                                 baslangic=time.time(), mesaj="başlatıldı")
+            surec = guncelleme.surec_oku()
+            assert surec["asama"] == guncelleme.GUNCELLEME_ASAMASI
+            assert "bitti" not in surec
+            # sürerken durum metni "sürüyor" demeli
+            metin, renk = guncelleme.durum_metni(baslangic=0)
+            assert "sürüyor" in metin and renk == "mavi"
+            # bitince sonuç yazılır
+            guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=0, surum="9.9.9")
+            surec = guncelleme.surec_oku()
+            assert surec["sonuc"] == 0 and surec["surum"] == "9.9.9"
+            assert surec["bitti"] >= surec["basladi"]
+            metin, _ = guncelleme.durum_metni(baslangic=0)
+            assert "tamam" in metin and "9.9.9" in metin
+            # başarısız güncelleme
+            guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=1, mesaj="disk dolu")
+            metin, renk = guncelleme.durum_metni(baslangic=0)
+            assert "başarısız" in metin and "disk dolu" in metin and renk == "kirmizi"
+        finally:
+            del os.environ["XDG_STATE_HOME"]
+
+
+def test_yeniden_baslat_gerekli_dosya_zamani():
+    """Kurulu kod, pano açıldıktan SONRA değiştiyse yeniden başlatma gerekir."""
+    yol = guncelleme.kurulu_dosya()
+    if not yol:
+        print("    (kurulu paket yolu bulunamadı — atlandı)")
+        return
+    import time
+    # pano "şimdi" açıldı, kurulu dosya eski → gerek yok
+    assert guncelleme.yeniden_baslat_gerekli(baslangic=time.time() - 5) is False
+    # pano "dün" açıldı, kurulu dosya bugün değişti → gerekli
+    assert guncelleme.yeniden_baslat_gerekli(baslangic=time.time() - 86400) is True
+
+
+def test_yeniden_baslat_yolu_ortama_gore():
+    """Servis varsa systemctl, masaüstü oturumunda pano düğmesi söylenmeli."""
+    gercek = guncelleme.systemd_kullanici_birimi
+    try:
+        guncelleme.systemd_kullanici_birimi = lambda: True
+        assert "systemctl --user restart syspano" in guncelleme.yeniden_baslat_yolu()
+        guncelleme.systemd_kullanici_birimi = lambda: False
+        metin = guncelleme.yeniden_baslat_yolu()
+        assert "Panoyu yeniden başlat" in metin and "systemctl" not in metin
+    finally:
+        guncelleme.systemd_kullanici_birimi = gercek
+
+
 def test_depo_surumu_okuma():
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, "src", "syspano"))

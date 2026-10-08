@@ -451,6 +451,66 @@ def test_gunluk_karti_ve_dosya_goruntuleyici():
         p.kapat()
 
 
+def test_guncelleme_denetim_akisi():
+    """«Güncellemeyi denetle» akışı: denetleniyor → sonuç görünür olmalı.
+
+    Alt süreç sahte: denetimin kendisi değil, panonun durumu nasıl gösterdiği
+    sınanır (kullanıcının şikâyeti: sonuç belli olmuyordu).
+    """
+    import tempfile
+
+    import syspano.arayuz.pano as pano_mod
+    from syspano import guncelleme
+
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["XDG_STATE_HOME"] = d
+        try:
+            p = _pano_olustur(kartlar=["cpu"], guncelleme_denetimi=False)
+            if p is None:
+                return
+            gercek = pano_mod.subprocess.Popen
+            pano_mod.subprocess.Popen = lambda *a, **k: None
+            try:
+                # 1) denetle: durum "denetleniyor" olmalı
+                p._dugme_isle("guncelle_denetle")
+                durum = p._ayar_durumu()["guncelleme"]
+                assert "Denetleniyor" in durum["metin"], durum
+                assert durum["renk"] == "mavi"
+                assert p._denetim_bekliyor > 0, "denetim durumu işaretlenmedi"
+
+                # 2) önbellek tazelendi → sonuç hem satırda hem bildirimde
+                guncelleme._denetim_yaz({"zaman": time.time(), "yeni": False,
+                                         "yerel": guncelleme.yerel_surum()})
+                p._denetim_sonuc_bekle()
+                assert p._denetim_bekliyor == 0, "denetim durumu temizlenmedi"
+                durum = p._ayar_durumu()["guncelleme"]
+                assert "Güncel" in durum["metin"] and durum["renk"] == "yesil"
+                assert "Güncel" in p.bildiri, f"bildirim yok: {p.bildiri!r}"
+
+                # 3) yeni sürüm: ⚙ noktası yanar, satır sarı olur
+                guncelleme._denetim_yaz({"zaman": time.time(), "yeni": True,
+                                         "depo_surum": "9.9.9"})
+                p._guncelleme_var_guncelle()
+                assert p._guncelleme_var is True, "⚙ uyarı noktası yanmadı"
+                durum = p._ayar_durumu()["guncelleme"]
+                assert "9.9.9" in durum["metin"] and durum["renk"] == "sari"
+
+                # 4) zaman aşımı: önbellek tazelenmediyse kırmızı uyarı
+                try:
+                    os.remove(guncelleme.denetim_yolu())
+                except OSError:
+                    pass
+                p._denetim_bekliyor = time.time() - 60
+                p._denetim_sonuc_bekle()
+                durum = p._ayar_durumu()["guncelleme"]
+                assert "zaman aşımı" in durum["metin"] and durum["renk"] == "kirmizi"
+            finally:
+                pano_mod.subprocess.Popen = gercek
+                p.kapat()
+        finally:
+            del os.environ["XDG_STATE_HOME"]
+
+
 if __name__ == "__main__":
     import sys
     import traceback

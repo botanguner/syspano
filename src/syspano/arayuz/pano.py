@@ -112,6 +112,10 @@ class Pano:
         self._son_gorunum = None              # görünüm değişimini yakalamak için
         self._guncelleme_var = False          # önbellekteki denetim sonucu
         self._guncelleme_kontrol = 0.0
+        self._baslama = time.time()           # kurulu kod sonradan değişti mi?
+        self._denetim_bekliyor = 0.0          # >0 → denetim sürüyor (başlama anı)
+        self._denetim_asimi = False           # son denetim zaman aşımına uğradı
+        self.bildiri_sure = 2.5               # bildirim süresi (saniye)
         self.bildiri = ""
         self.bildiri_zaman = 0.0
         if demo:
@@ -185,6 +189,15 @@ class Pano:
         self.kok.after(300, self._komut_oku)
         self.kok.after(2000, self._durum_yaz)
         self.kok.after(600, self._mercek_denetle)
+        # süren bir güncelleme varsa (pano güncelleme sırasında açıldıysa) izle
+        try:
+            from .. import guncelleme
+            surec = guncelleme.surec_oku()
+            if (surec.get("asama") == guncelleme.GUNCELLEME_ASAMASI
+                    and not surec.get("bitti")):
+                self.kok.after(2000, self._guncelleme_surec_denetle)
+        except Exception:
+            pass
         # güncelleme denetimi: önbellek eskimişse arka planda bir kez
         if ayarlar.get("guncelleme_denetimi", True) and not demo:
             self.kok.after(9000, self._guncelleme_denetimi)
@@ -519,26 +532,46 @@ class Pano:
                    kartlar_modul._kirp(c, metin, 10.5, gen), 10.5, renk)
 
     # ── ayar ekranı ──
-    def _bildir(self, metin):
+    def _bildir(self, metin, sure=None):
         self.bildiri = metin
+        self.bildiri_sure = float(sure or 2.5)
         self.bildiri_zaman = time.monotonic()
 
     def _guncelleme_var_guncelle(self):
+        """⚙ düğmesindeki sarı nokta: yeni sürüm ya da bekleyen yeniden başlatma."""
         try:
             from .. import guncelleme
-            self._guncelleme_var = guncelleme.yeni_surum_var()
+            self._guncelleme_var = (
+                guncelleme.yeni_surum_var()
+                or guncelleme.yeniden_baslat_gerekli(getattr(self, "_baslama", None)))
         except Exception:
             self._guncelleme_var = False
 
     def _ayar_durumu(self):
+        from .. import __version__ as calisan
         from .. import guncelleme
         kart_bilgi = {ad: yerlesim.KART_BILGI[ad]["baslik"]
                       for ad in sorted(yerlesim.KART_BILGI,
                                        key=lambda k: yerlesim.KART_BILGI[k]["oncelik"],
                                        reverse=True)}
         self._guncelleme_var_guncelle()
+        kurulu = guncelleme.kurulu_surum()
+        # Çalışan kod ile kurulu paket ayrı şeylerdir: güncelleme sonrası pano
+        # yeniden başlatılana kadar bellekte eski kod durur.
+        surum_metni = f"SysPano {calisan}"
+        if kurulu and kurulu != calisan:
+            surum_metni += f" · kurulu paket {kurulu}"
+        metin, renk = guncelleme.durum_metni(
+            denetim_suruyor=bool(self._denetim_bekliyor),
+            zaman_asimi=self._denetim_asimi,
+            baslangic=getattr(self, "_baslama", None))
+        istenen_olcek = self.ayarlar.get("olcek")
         return {"kart_bilgi": kart_bilgi,
-                "surum_metni": f"SysPano {guncelleme.yerel_surum()} · {guncelleme.metin_ozet()}"}
+                "surum_metni": surum_metni,
+                "guncelleme": {"metin": metin, "renk": renk},
+                # küçük ekranda istenen ölçek kırpılır: ayar ekranı bunu söyler
+                "olcek_istenen": float(istenen_olcek) if istenen_olcek else 0.0,
+                "olcek_etkin": round(self.S, 2)}
 
     def _ayar_kutusu(self, kid):
         if not self._ayar_plan:
@@ -569,7 +602,7 @@ class Pano:
         elif kid == "olcek_oto":
             self._ayar_uygula("olcek_oto", None)
         elif kid == "guncelle_denetle":
-            self._bildir("Güncelleme denetleniyor…")
+            self._bildir("Güncelleme denetleniyor…", 6)
             self._guncelleme_denetimi(zorla=True)
         elif kid == "guncelle_uygula":
             self._guncellemeyi_baslat()
@@ -649,7 +682,12 @@ class Pano:
         self._ayar_plan = None
 
     def _guncelleme_denetimi(self, zorla=False):
-        """Yeni sürüm var mı? Ağa çıkan iş ayrı bir süreçte yapılır."""
+        """Yeni sürüm var mı? Ağa çıkan iş ayrı bir süreçte yapılır.
+
+        Denetim başlatıldığında ayarlar ekranı **"Denetleniyor…"** gösterir;
+        sonuç gelince (ya da 30 saniyede zaman aşımına uğrayınca) bunu hem
+        ekranda hem bildirimde görürsünüz.
+        """
         if self._kapali:
             return
         try:
@@ -657,28 +695,82 @@ class Pano:
             if not zorla and not guncelleme.denetim_bayati(24):
                 self._guncelleme_var_guncelle()
                 return
+            self._denetim_bekliyor = time.time()
+            self._denetim_asimi = False
+            self._son_imza = None
             subprocess.Popen([sys.executable, "-m", "syspano", "--guncelle-denetle"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
-        except Exception:
-            pass
-        self.kok.after(8000, self._guncelleme_var_guncelle)
+        except Exception as hata:
+            self._denetim_bekliyor = 0.0
+            self._bildir(f"Denetim başlatılamadı: {hata}", 8)
+            return
+        self._denetim_sonuc_bekle()
+
+    def _denetim_sonuc_bekle(self):
+        """Denetim önbelleği tazelenene kadar bekler (en fazla 30 saniye)."""
+        from .. import guncelleme
+        if self._kapali or not self._denetim_bekliyor:
+            return
+        basladi = self._denetim_bekliyor
+        denetim = guncelleme.denetim_oku()
+        if float(denetim.get("zaman") or 0) >= basladi - 2:
+            self._denetim_bekliyor = 0.0
+            self._denetim_asimi = False
+            self._guncelleme_var_guncelle()
+            metin, _ = guncelleme.durum_metni(denetim=denetim)
+            self._bildir(metin, 8)
+            self._son_imza = None
+            self.ciz()
+            return
+        if time.time() - basladi > 30:
+            self._denetim_bekliyor = 0.0
+            self._denetim_asimi = True
+            self._bildir("Denetim zaman aşımına uğradı (ağ yok?)", 8)
+            self.ciz()
+            return
+        self.kok.after(1000, self._denetim_sonuc_bekle)
 
     def _guncellemeyi_baslat(self):
         from .. import guncelleme
         if not guncelleme.kayit_oku():
-            self._bildir("Kurulum kaydı yok — ./install.sh ile kurun")
+            self._bildir("Kurulum kaydı yok — ./install.sh ile kurun", 8)
             return
         try:
+            guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI,
+                                 baslangic=time.time(), mesaj="başlatıldı")
             yol = os.path.join(guncelleme.durum_dizini(), "guncelleme.log")
             with open(yol, "a") as kayit:
                 kayit.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} güncelleme ===\n")
                 kayit.flush()
                 subprocess.Popen([sys.executable, "-m", "syspano", "--guncelle"],
                                  stdout=kayit, stderr=kayit, start_new_session=True)
-            self._bildir("Güncelleme arka planda başladı — bitince yeniden başlatın")
+            self._bildir("Güncelleme arka planda başladı…", 6)
+            self._son_imza = None
+            self.kok.after(2000, self._guncelleme_surec_denetle)
         except Exception as hata:
-            self._bildir(f"Güncelleme başlatılamadı: {hata}")
+            self._bildir(f"Güncelleme başlatılamadı: {hata}", 8)
+
+    def _guncelleme_surec_denetle(self):
+        """Güncelleme sürecini izler; bitince sonucu bildirir."""
+        from .. import guncelleme
+        if self._kapali:
+            return
+        surec = guncelleme.surec_oku()
+        if surec.get("bitti"):
+            self._guncelleme_var_guncelle()
+            if surec.get("sonuc"):
+                self._bildir("Güncelleme başarısız — ayrıntı: güncelleme.log", 10)
+            else:
+                self._bildir("Güncelleme tamam — Panoyu yeniden başlatın", 10)
+            self._son_imza = None
+            self.ciz()
+            return
+        basladi = float(surec.get("basladi") or time.time())
+        if time.time() - basladi > 900:          # 15 dk: sessizce bırakma
+            self._bildir("Güncelleme 15 dakikadır sürüyor — güncelleme.log'a bakın", 10)
+            return
+        self.kok.after(2000, self._guncelleme_surec_denetle)
 
     def _yeniden_baslat(self):
         self._bildir("Yeniden başlatılıyor…")
@@ -756,13 +848,16 @@ class Pano:
             c.yazi(dx + dw / 2, dy + dh / 2 + 1, etiket, 11,
                    R["arka"] if secili else R["yazi"], secili, "center")
             # güncelleme varsa ⚙ üzerinde küçük bir uyarı noktası
+            # (çizim yardımcıları kullanılır: ham create_oval etiketsiz kalıp
+            #  her karede bir tuval öğesi sızdırıyordu)
             if ad == "ayar" and self._guncelleme_var:
                 r = 4.0
-                c.c.create_oval(dx + dw - r - 3, dy + 3, dx + dw + r - 3, dy + 3 + 2 * r,
-                                fill=R["sari"], outline=R["ustluk"])
+                c.oval(dx + dw - r - 3, dy + 3, dx + dw + r - 3, dy + 3 + 2 * r,
+                       R["sari"], R["ustluk"], 1)
 
     def _bildiri_ciz(self):
-        if not (self.bildiri and time.monotonic() - self.bildiri_zaman < 2.5):
+        if not (self.bildiri and
+                time.monotonic() - self.bildiri_zaman < getattr(self, "bildiri_sure", 2.5)):
             return
         c, R = self.cek, self.R
         g = self._metin_gen(self.bildiri, 12, True)
@@ -772,6 +867,11 @@ class Pano:
 
     def _altbilgi_ciz(self, v, plan):
         c, R = self.cek, self.R
+        # Alt şerit **opak** olmalı: kaydırılan kart içeriği altından görünüp
+        # yazıyla çakışıyordu (Raspberry Pi panelinde görüldü).
+        alt = self.tasarim_y - yerlesim.ALT_BILGI
+        c.dik(0, alt, self.tasarim_g, self.tasarim_y, R["ustluk"])
+        c.dik(0, alt, self.tasarim_g, alt + 0.8, R["kenar"])
         ekran = self.cikis.ad if self.cikis else "tüm ekran"
         parcalar = [f"{self.w}x{self.h} ({ekran})", f"ölçek {self.S:.2f}"]
         if plan and self.tasarim_g > 620:
@@ -1102,7 +1202,7 @@ class Pano:
             self.gizle() if self.gorunur else self.goster()
         elif komut.startswith("gorunum:"):
             hedef = komut.split(":", 1)[1]
-            if hedef in ("pano", "terminal"):
+            if hedef in ("pano", "terminal", "ayar"):
                 self.goster()
                 self.gorunum_degistir(hedef)
         elif komut == "gorunum_degistir":

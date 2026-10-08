@@ -3,6 +3,63 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.4.1] — 2026-10-08
+
+### Düzeltildi
+- **Ayarlar ekranındaki güncelleme akışı sonuçsuz kalıyordu.** Düğmeye
+  dokununca "denetleniyor" bildirimi 2,5 saniyede kayboluyor, sonuç (güncel /
+  yeni sürüm / denetlenemedi) yalnızca SÜRÜM kutusundaki soluk tek satırda
+  **8 saniye sonra** beliriyordu; güncelleme bittikten sonra başarılı mı
+  başarısız mı olduğu panoda hiç görünmüyor, panonun yeniden başlatılması
+  gerektiği de söylenmiyordu. Artık:
+  - SÜRÜM kutusunda **renkli durum satırı** var ve her aşamayı yazar:
+    `⟳ Denetleniyor…`, `✓ Güncel · son denetim 5 dk önce`,
+    `⬆ Yeni sürüm var: 1.4.1 — «Güncelle»ye dokunun`, `⚠ Denetlenemedi: …`,
+    `⏳ Güncelleme sürüyor… (42 sn)`,
+    `✓ Güncelleme tamam (1.4.1) — Panoyu yeniden başlatın`,
+    `⚠ Güncelleme başarısız — …`.
+  - Sonuç ayrıca **bildirim** olarak çıkar ve denetim sabit 8 saniye beklemek
+    yerine **önbelleği izleyerek** sonucu yakalar (en fazla 30 saniye; aşılırsa
+    kırmızı "zaman aşımı" uyarısı).
+  - Güncelleme süreci durumu `~/.local/state/syspano/guncelleme-durum.json`'a
+    yazılır; pano bunu izleyip bitişte/hatada haber verir. Pano güncelleme
+    sırasında yeniden başlatılırsa izleme kaldığı yerden sürer.
+  - **"Kurulu paket yeni, bellekteki kod eski"** durumu artık açıkça söylenir ve
+    ⚙ düğmesindeki sarı nokta bu durumda da yanar: güncelleme sonrası pano
+    yeniden başlatılmadan hiçbir şey değişmiyordu (Raspberry Pi'de canlı
+    görüldü: 1.4.0 kuruluyken pano 1.3.2 kodunu çalıştırıyordu).
+  - Yeniden başlatma yönergesi ortama göre verilir: systemd kullanıcı servisi
+    varsa `systemctl --user restart syspano`, masaüstü oturumunda
+    kendiliğinden başlatılıyorsa **⚙ → Panoyu yeniden başlat**. (Eski
+    `guncelleme.log` her durumda systemctl öneriyordu; Pi'de böyle bir servis
+    yok, komut hata veriyordu.)
+- **Alt bilgi şeridi opak yapıldı.** Kaydırılan kart içeriği şeridin altından
+  görünüp yazıyla çakışıyordu (Pi'nin 800×480 panelinde görüldü: "SICAKLIK /
+  FAN" başlığı `800x480 (DSI-1) · ölçek 1,50` yazısının üstüne biniyordu).
+- **⚙ düğmesindeki uyarı noktası her karede bir tuval öğesi sızdırıyordu**
+  (ham `create_oval` etiketsiz kalıyordu): nokta göründüğü sürece kare başına
+  bir öğe birikiyor, bellek ve çizim süresi büyüyordu. Artık çizim yardımcısı
+  kullanılıyor — kare öğelerinin birikmediğini denetleyen test yakaladı.
+- **Küçük ekranda kırpılan ölçek artık söylenir.** Raspberry Pi'de
+  `"olcek": 2.8` yazıyordu ama pencere sınırı yüzünden etkin ölçek **1,50**'ydi;
+  ayar ekranındaki kaydırıcı ise 2,80 gösteriyordu. Artık kırpma olduğunda
+  ayar ekranı "Bu ekranda en fazla 1.50 uygulanabiliyor (istenen 2.80)" yazar.
+
+### Eklendi
+- `guncelleme.durum_metni()` — **saf** fonksiyon: aşama → (metin, renk).
+- `guncelleme.surec_yaz()` / `surec_oku()` — güncelleme sürecinin durumu.
+- `guncelleme.yeniden_baslat_gerekli()` — kurulu paketin dosya zamanını pano
+  açılış anıyla karşılaştırır (sürümden bağımsız, en isabetli ölçüt);
+  `kurulu_surum()` ve `yeniden_baslat_yolu()`.
+- `syspano --guncelle-denetle` çalışan kod/kurulu paket ayrımını ve doğru
+  yeniden başlatma yolunu yazar.
+- Tepsi/komut dosyası (pano ↔ tepsi iletişimi) `gorunum:ayar` komutunu da kabul
+  eder: ayar ekranı uzaktan/tepsiden açılabilir.
+- **7 yeni test** (toplam **14 dosyada 130 test**): durum metninin tüm
+  aşamaları, süreç durumu dosyası, yeniden başlatma tespiti, ortama göre
+  yönerge, ayar ekranında durum satırı ve ölçek uyarısı, panoda uçtan uca
+  denetim akışı.
+
 ## [1.4.0] — 2026-10-08
 
 ### Eklendi

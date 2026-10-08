@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 from . import __version__
 from . import ayar as ayar_modul
@@ -123,41 +124,57 @@ def _guncelle_calistir():
               "<depo>")
         return 1
     print(f"Güncelleniyor… (kaynak: {kayit.get('kaynak')}, yöntem: {kayit.get('yontem')})")
-    sonuc = guncelleme.guncelle()
+    # Durumu dosyaya yaz: pano bunu okuyup "sürüyor / bitti / başarısız" gösterir.
+    guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, baslangic=time.time(),
+                         mesaj="başlatıldı")
+    try:
+        sonuc = guncelleme.guncelle()
+    except Exception as hata:                       # beklenmedik hata
+        guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=1,
+                             mesaj=f"{type(hata).__name__}: {hata}")
+        print(f"  ✗ güncelleme başarısız: {hata}")
+        return 1
     for ok, mesaj in sonuc["adimlar"]:
         print(("  ✓ " if ok else "  ✗ ") + mesaj)
     if sonuc["ok"]:
-        print("\nYeniden başlatın:")
-        print("  systemctl --user restart syspano   (servis olarak çalışıyorsa)")
-        print("  ya da panoyu kapatıp yeniden açın")
+        try:
+            guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=0,
+                                 surum=guncelleme.kurulu_surum(),
+                                 mesaj="tamam")
+        except Exception:
+            pass
+        print(f"\nYeniden başlatın: {guncelleme.yeniden_baslat_yolu()}")
         return 0
+    hatalar = [m for ok, m in sonuc["adimlar"] if not ok]
+    try:
+        guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=1,
+                             mesaj=(hatalar[-1][:160] if hatalar else "bilinmeyen hata"))
+    except Exception:
+        pass
     return 1
 
 
 def _denetle_calistir():
     from . import guncelleme
     kayit = guncelleme.kayit_oku()
-    print(f"yerel sürüm : {guncelleme.yerel_surum()}")
+    print(f"çalışan kod : {__version__}")
+    print(f"kurulu paket: {guncelleme.kurulu_surum()}")
+    if guncelleme.yeniden_baslat_gerekli():
+        print("              ↳ bellekteki kod eski — yeniden başlatın: "
+              + guncelleme.yeniden_baslat_yolu())
     if kayit:
         print(f"kurulum     : {kayit.get('yontem')} → {kayit.get('kaynak')}")
     else:
         print("kurulum     : kayıt yok (install.sh yazmamış)")
     sonuc = guncelleme.denetle()
+    metin, _renk = guncelleme.durum_metni(denetim=sonuc)
+    print(f"durum       : {metin}")
     if sonuc.get("hata"):
-        print(f"durum       : denetlenemedi — {sonuc['hata']}")
         return 1
     if sonuc.get("yeni"):
-        ayrinti = []
-        if sonuc.get("uzak"):
-            ayrinti.append(f"uzak {sonuc['uzak']}")
-        if sonuc.get("geride"):
-            ayrinti.append(f"{sonuc['geride']} yeni commit")
-        print("durum       : YENİ SÜRÜM VAR — " + " · ".join(ayrinti))
         if sonuc.get("mesaj"):
             print(f"              son: {sonuc['mesaj']}")
         print("              güncellemek için: syspano --guncelle")
-        return 0
-    print("durum       : güncel")
     return 0
 
 
