@@ -16,6 +16,11 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
   RFC 5737) konuldu.
 - Alt bilgi, çekirdek sürümünü `os.uname()` yerine toplanan veriden okuyor —
   demo modunda gerçek sürüm görünmesin.
+- **Depo geçmişi yeniden yazıldı.** 1.2.1 öncesi commit'lerde kişisel bilgi
+  içeren ekran görüntüleri duruyordu; geçmişteki **her** commit'te görselin
+  temiz sürümü olacak biçimde yeniden yazıldı (`main` güncellendi). Bu, tüm
+  commit SHA'larını değiştirdi: eski bir klonunuz varsa
+  `git fetch && git reset --hard origin/main` ya da yeniden klonlayın.
 
 ### Eklendi
 - **`--demo` modu** (`src/syspano/demo.py`): hiçbir sistem dosyası okumaz,
