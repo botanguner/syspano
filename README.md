@@ -9,7 +9,10 @@ Tkinter ile çizilir: **harici Python bağımlılığı yoktur**, her şey `/pro
 `/sys`'den okunur. Kurulum tek betikle yapılır; Ubuntu, Debian, Fedora, Arch ve
 Raspberry Pi OS üzerinde çalışır.
 
-![SysPano ekran görüntüsü](docs/ekran-goruntusu.png?v=1.2.1)
+![SysPano ekran görüntüsü](https://raw.githubusercontent.com/botanguner/syspano/main/docs/ekran-goruntusu.png?v=1.2.1)
+
+<sub>Not: görsel değiştiğinde adresteki `?v=` eki artırılmalı — aksi hâlde
+tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub>
 
 <sub>Ekran görüntüsü `syspano --demo` ile alındı: tüm değerler uydurmadır
 (makine adı, IP, disk modeli, süreç adları).</sub>
