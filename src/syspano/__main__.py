@@ -1,4 +1,4 @@
-"""syspano paketinin giriş noktası: `python3 -m syspano`."""
+"""python -m syspano → CLI."""
 
 import sys
 

@@ -1,324 +1,352 @@
-"""Ana pencere: çizim döngüsü, üst şerit, büyüteç, kaydırma ve terminal geçişi."""
+"""SysPano ana penceresi: veriyi toplar, yerleşimi hesaplar, tuvalı çizer.
+
+Uyarlanabilirlik üç yerden gelir:
+
+1. **Ölçek (S)** hedef ekranın DPI'ından hesaplanır (yapılandırmayla ezilebilir).
+2. **Tasarım uzayı** pencerenin piksel boyutundan türetilir; en-boy oranına göre
+   1–4 sütunlu düzen kurulur (bkz. `arayuz/yerlesim.py`).
+3. **Kartlar** verilen dikdörtgene uyar; yer darsa düşük öncelikli kartlar
+   gizlenir, gerekirse dikey kaydırma devreye girer.
+"""
 
 import json
 import os
 import threading
 import time
-
 import tkinter as tk
+from collections import deque
 
-from .. import ekran, ortam
+from .. import ayar as ayar_modul
+from .. import ortam
 from ..toplayici import Toplayici
-from ..yerlestir import Yerlesimci
-from . import kartlar, tema, yerlesim
+from ..yerlestir import Yerlestirici
+from . import kartlar as kartlar_modul
+from . import tema
+from . import yerlesim
 from .cekim import Cekim
 from .terminal import Terminal
 
-UST = yerlesim.UST
-
-# büyüteç (mercek)
-MERCEK_YARICAP = 170
+# ─── büyüteç (mercek) ayarları ───────────────────────────────────────────────
 MERCEK_ZOOM = 2.6
-MERCEK_UST_SINIR = 52
-MERCEK_BEKLEME = 0.4
-MERCEK_TOLERANS = 6
-
+MERCEK_BEKLEME = 0.4        # imleç bu kadar saniye durunca belirir
+MERCEK_TOLERANS = 6         # bu kadar pikselden fazla oynarsa gizlenir
+MERCEK_UST_SINIR = 52       # bu tasarım yüksekliğinin üstünde gizlenir (düğmeler)
 GECMIS_UZUNLUK = 240
 
 
 class Pano:
-    def __init__(self, ayar, cikis=None, mod=None, test=False, kwin=None):
-        self.ayar = ayar
-        self.baslik = ayar.get("uygulama_basligi", "SysPano")
-        self.sinif = "syspano"
-        self.test = test
-
-        cikis = cikis if cikis is not None else ekran.ekran_sec(ayar.get("ekran", "auto"))
+    def __init__(self, ayarlar, cikis=None, mod="ekran"):
+        self.ayarlar = ayarlar
         self.cikis = cikis
-        mod = mod or ayar.get("mod", "ekran")
-        if mod not in ("ekran", "pencere", "tam-ekran"):
-            mod = "ekran"
         self.mod = mod
+        self.sinif = "syspano"
+        self.R = tema.tema_sec(ayarlar.get("tema", "koyu"))
 
-        x, y, w, h = self._geometri(cikis, mod)
-        self.ekran_g, self.ekran_y = w, h
-        self.tk_geom = (x, y, w, h)
-        self.kwin_geom = self._kwin_geometri(cikis, x, y, w, h)
+        # ── geometri (X11/Xwayland piksel uzayı) ──
+        if cikis is not None:
+            self.x, self.y, self.w, self.h = cikis.tk_geom
+            self.kwin_koord = cikis.kwin_geom
+        else:
+            from ..ekran import sanal_ekran
+            sw, sh = sanal_ekran()
+            self.x, self.y, self.w, self.h = 0, 0, sw or 1280, sh or 720
+            self.kwin_koord = None
+        if mod == "pencere":
+            pw, ph = [int(v) for v in ayarlar.get("pencere", [1280, 720])]
+            self.x += max(0, (self.w - pw) // 2)
+            self.y += max(0, (self.h - ph) // 2)
+            self.w, self.h = pw, ph
+            self.kwin_koord = None
 
-        # ── ölçek: tasarım uzayı ~1600x800 kalsın diye çözünürlüğe göre ──
-        taban = min(w / 1600.0, h / 800.0)
-        carpan = float(ayar.get("olcek") or 1.0)
-        self.S = max(0.85, min(3.0, taban * carpan))
-        self.TG = int(round(w / self.S))     # tasarım genişliği
-        self.TY = int(round(h / self.S))     # tasarım yüksekliği
-        self.dpi = cikis.dpi if cikis else 0.0
-
-        self.renk = tema.tema_sec(ayar.get("tema", "koyu"))
-
-        # ── pencere ──
-        self.kok = tk.Tk(className=self.sinif)
-        self.kok.title(self.baslik)
-        self.kok.configure(bg=self.renk["arka"])
-        self._yerlesimci = None
-
-        self.c = tk.Canvas(self.kok, width=w, height=h, bg=self.renk["arka"],
-                           highlightthickness=0)
-        self.c.pack()
-        self.ck = Cekim(self.c, self.S, self.renk, tema.yazi_ailesi(self.kok))
-        self.ck.ekran_g, self.ck.ekran_y = w, h
-
-        # ── yerleşim ──
-        self.aktif_kartlar = [k for k in (ayar.get("kartlar") or list(yerlesim.KART_BILGI))
-                              if k in yerlesim.KART_BILGI]
-        self.plan = yerlesim.planla(self.TG, self.TY, self.aktif_kartlar,
-                                    otomatik=ayar.get("otomatik_kart", True))
-        self.gizli_kartlar = self.plan.get("gizli", [])
-        self.icerik_y = self.plan["icerik_y"]
+        self.S = self._olcek_hesapla()
+        self.tasarim_g = max(320, int(round(self.w / self.S)))
+        self.tasarim_y = max(240, int(round(self.h / self.S)))
 
         # ── durum ──
-        self.gorunum = "pano"
+        self.gorunum = "pano"                 # "pano" | "terminal"
+        self.terminal = None
         self.gorunur = True
         self.kaydir = 0.0
-        self.terminal = None
-        self.terminal_etkin = bool(ayar.get("terminal", True))
-        self.terminal_yazi = int(ayar.get("terminal_yazi")
-                                 or self._terminal_yazi_otomatik())
+        self._max_kaydir = 0.0
+        self._tiklama = None
+        self._son_plan = None
+        self._son_imza = None
         self.bildiri = ""
         self.bildiri_zaman = 0.0
-        self.baslangic = time.monotonic()
-        self._basili = None
+        self.t = Toplayici(ayarlar)
+        self.gecmis = {k: deque(maxlen=GECMIS_UZUNLUK) for k in
+                       ("cpu", "bellek", "sicaklik", "pil", "gpu", "dgpu",
+                        "ag_in", "ag_out")}
 
-        # büyüteç
-        self.buyutec = bool(ayar.get("buyutec", True))
+        # mercek
         self.mercek = None
         self.mercek_yer = None
         self.mercek_zaman = 0.0
-        self._fare_bas = None
 
-        # geçmiş
-        from collections import deque
-        self.gecmis = {k: deque(maxlen=GECMIS_UZUNLUK) for k in
-                       ("cpu", "bellek", "sicaklik", "pil", "gpu", "dgpu", "ag_in", "ag_out")}
+        # tepsi iletişimi
+        calisma = ortam.emin_ol(ortam.durum_dizini())
+        self.komut_yolu = os.path.join(calisma, "komut")
+        self.durum_yolu = os.path.join(calisma, "durum.json")
 
-        # tepsi ↔ pano iletişimi
-        self.durum_dizin = ortam.emin_ol(ortam.durum_dizini())
-        self.komut_yolu = os.path.join(self.durum_dizin, "komut")
-        self.durum_yolu = os.path.join(self.durum_dizin, "durum.json")
+        # terminal yazı boyutu
+        self.terminal_yazi = self._terminal_varsayilan()
 
-        # ── toplayıcı ──
-        self.t = Toplayici(ayar)
-        threading.Thread(target=self.t.dongu, daemon=True).start()
+        # ── pencere ──
+        self.kok = tk.Tk(className=self.sinif)
+        self.kok.title(ayarlar.get("uygulama_basligi", "SysPano"))
+        self.kok.configure(bg=self.R["arka"])
+        self.c = tk.Canvas(self.kok, width=self.w, height=self.h, bg=self.R["arka"],
+                           highlightthickness=0)
+        self.c.pack(fill="both", expand=True)
+        self.cek = Cekim(self.c, self.S, self.R, tema.yazi_ailesi(self.kok))
+        self.cek.ekran_g, self.cek.ekran_y = self.w, self.h
+
+        self.yer = Yerlestirici(self.kok, self.sinif, self.x, self.y, self.w, self.h,
+                                kwin_koord=self.kwin_koord,
+                                yonetilen=(mod == "pencere"
+                                           or bool(ayarlar.get("yonetilen_pencere"))))
+        self.yer.pencere_hazirla()
 
         # ── olaylar ──
-        self.c.bind("<Button-1>", self.tiklama)
-        self.c.bind("<ButtonRelease-1>", self.birakma)
-        self.c.bind("<B1-Motion>", self.surukle)
-        self.c.bind("<Key>", self.tus)
-        self.c.bind("<Motion>", self.fare)
-        self.c.bind("<Leave>", self.fare_cikti)
-        for tus in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
-            self.c.bind(tus, self.tekerlek)
-        self.kok.bind("<Key>", self.tus)
-        self.kok.protocol("WM_DELETE_WINDOW", self.kapat)
+        self.c.bind("<ButtonPress-1>", self._basildi)
+        self.c.bind("<B1-Motion>", self._surukle)
+        self.c.bind("<ButtonRelease-1>", self._birakildi)
+        self.c.bind("<Motion>", self._fare)
+        self.c.bind("<Leave>", self._fare_cikti)
+        self.c.bind("<Button-4>", self._tekerlek)
+        self.c.bind("<Button-5>", self._tekerlek)
+        self.c.bind("<MouseWheel>", self._tekerlek)
+        self.kok.bind("<Key>", self._tus)
+        self.c.bind("<Key>", self._tus)
         for t in ("<Control-plus>", "<Control-equal>", "<Control-KP_Add>"):
-            self.kok.bind(t, self.yazi_buyut); self.c.bind(t, self.yazi_buyut)
+            self.kok.bind(t, lambda e: self._yazi_degistir(+2))
+            self.c.bind(t, lambda e: self._yazi_degistir(+2))
         for t in ("<Control-minus>", "<Control-KP_Subtract>"):
-            self.kok.bind(t, self.yazi_kucult); self.c.bind(t, self.yazi_kucult)
+            self.kok.bind(t, lambda e: self._yazi_degistir(-2))
+            self.c.bind(t, lambda e: self._yazi_degistir(-2))
         for t in ("<Control-Key-0>", "<Control-KP_0>"):
-            self.kok.bind(t, self.yazi_sifirla); self.c.bind(t, self.yazi_sifirla)
+            self.kok.bind(t, lambda e: self._yazi_sifirla())
+            self.c.bind(t, lambda e: self._yazi_sifirla())
+        self.kok.protocol("WM_DELETE_WINDOW", self.kapat)
 
-        # ── planlanan görevler ──
-        if test:
-            self.kok.after(9000, self.kapat)
-        self.kok.after(150, self._yerlestir)
-        self.kok.after(500, self._komut_isle)
-        self.kok.after(1500, self._durum_yaz)
-        self.kok.after(4000, self._gorev_cubugu_denetle)
+        # ── zamanlayıcılar ──
+        self._kapali = False
+        for gecikme in (250, 900, 2600):
+            self.kok.after(gecikme, self.yer.uygula)
+        threading.Thread(target=self.t.dongu, daemon=True).start()
+        self.kok.after(300, self._komut_oku)
+        self.kok.after(2000, self._durum_yaz)
         self.kok.after(600, self._mercek_denetle)
+        if ayarlar.get("test_suresi"):
+            self.kok.after(int(ayarlar["test_suresi"]) * 1000, self.kapat)
         self.ciz()
 
-    # ── geometri ──
-    def _geometri(self, cikis, mod):
-        if mod == "pencere":
-            pw, ph = self.ayar.get("pencere", [1280, 720])
-            pw, ph = int(pw), int(ph)
-            if cikis:
-                x = cikis.x + max(0, (cikis.g - pw) // 2)
-                y = cikis.y + max(0, (cikis.yuk - ph) // 2)
-            else:
-                x, y = 40, 40
-            return x, y, pw, ph
-        if cikis:
-            return cikis.x, cikis.y, cikis.g, cikis.yuk
-        sg, sy = ekran.sanal_ekran()          # tüm masaüstü
-        return 0, 0, sg or 1280, sy or 720
-
-    def _terminal_yazi_otomatik(self):
-        """Yazı boyutu: ölçek ile DPI'ın büyüğünden; okunabilir aralığa sıkıştırılır."""
-        dpi_orani = (self.dpi / 96.0) if self.dpi else 1.0
-        return max(12, min(40, int(round(9 * max(self.S, dpi_orani)))))
-
-    def _kwin_geometri(self, cikis, x, y, w, h):
-        """Pencerenin KWin mantıksal uzayındaki dikdörtgeni.
-
-        Kesirli ölçeklemede (ör. 1,35×) X11 uzayı ile KWin'in mantıksal uzayı
-        farklıdır; KWin betiği geometriyi mantıksal uzayda bekler.
-        """
-        if not (cikis and cikis.kk) or not cikis.kk[2]:
-            return (x, y, w, h)
-        s = cikis.g / cikis.kk[2]              # X11 pikseli / mantıksal birim
-        if s <= 0:
-            return (x, y, w, h)
-        return (int(round(cikis.kk[0] + (x - cikis.x) / s)),
-                int(round(cikis.kk[1] + (y - cikis.y) / s)),
-                int(round(w / s)), int(round(h / s)))
-
-    # ── yerleştirme ──
-    def _yerlestir(self):
-        kwin = ortam.kwin_var()
-        self._yerlesimci = Yerlesimci(
-            self.kok, self.sinif, kwin=kwin, tk_geom=self.tk_geom,
-            kwin_geom=self.kwin_geom,
-            yonetilen=self.ayar.get("yonetilen_pencere"), baslik=self.baslik)
-        self._yerlesimci.hazirla()
-        self._yerlesimci.yerlestir(deneme=2)
-        for gecikme, deneme in ((250, 1), (900, 2), (2600, 2)):
-            self.kok.after(gecikme, lambda g=deneme: self._yerlesimci.yerlestir(deneme=g))
-        self.kok.focus_force()
-        self.c.focus_set()
-
-    # ── düğmeler ──
-    def dugme_yerleri(self, w):
-        yerler = {}
-        x = w - 14
-        x -= 44
-        yerler["kapat"] = (x, 5, 44, 36)
-        if self.terminal_etkin:
-            x -= 14 + 200
-            yerler["terminal"] = (x, 5, 200, 36)
-        x -= 14 + 176
-        yerler["pano"] = (x, 5, 176, 36)
-        return yerler
-
-    # ── olaylar ──
-    def tiklama(self, olay):
-        self._fare_bas = (olay.x, olay.y)
-        self._basili = None
-
-    def surukle(self, olay):
-        """Sürükleme: içerik kaydırılabilirse kaydırır (dokunmatik paneller için)."""
-        if not self._kaydirilir() or self._fare_bas is None:
-            return
-        dy = olay.y - self._fare_bas[1]
-        if self._basili is None:
-            if abs(dy) <= 8:
-                return
-            self._basili = True
-        self._kaydir_ayarla(self.kaydir - dy)
-        self._fare_bas = (olay.x, olay.y)
-
-    def birakma(self, olay):
-        if self._basili:
-            self._fare_bas = None
-            self._basili = None
-            return
-        self._fare_bas = None
-        s = self.S
-        dx, dy = olay.x / s, olay.y / s
-        for ad, (bx, by, bw, bh) in self.dugme_yerleri(self.TG).items():
-            if bx <= dx <= bx + bw and by <= dy <= by + bh:
-                if ad == "kapat":
-                    self.kapat()
-                else:
-                    self.gorunum_degistir(ad)
-                return
-        if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
-            self.terminal_baslat()
-        self.kok.focus_force()
-        self.c.focus_set()
-
-    def tus(self, olay):
-        if olay.state & 0x4:
-            k = olay.keysym
-            if k in ("plus", "equal", "KP_Add"):
-                return self.yazi_buyut()
-            if k in ("minus", "underscore", "KP_Subtract"):
-                return self.yazi_kucult()
-            if k in ("0", "KP_0"):
-                return self.yazi_sifirla()
-        if self.gorunum == "terminal" and self.terminal:
-            return self.terminal.tus(olay)
-        return None
-
-    def tekerlek(self, olay):
-        if self.gorunum == "terminal" and self.terminal:
-            return self.terminal.tekerlek(olay)
-        if self._kaydirilir():
-            num = getattr(olay, "num", 0)
-            yon = 1 if (getattr(olay, "delta", 0) > 0 or num == 4) else -1
-            self._kaydir_ayarla(self.kaydir - yon * self.S * 60)
-            return "break"
-        return None
-
-    def _kaydirilir(self):
-        return self.icerik_y * self.S > self.ekran_y + 1
-
-    def _kaydir_ayarla(self, deger):
-        ust = 0.0
-        alt = max(0.0, self.icerik_y * self.S - self.ekran_y)
-        yeni = max(ust, min(alt, deger))
-        if abs(yeni - self.kaydir) > 0.5:
-            self.kaydir = yeni
-            self.ciz()
-
-    def _kart_gorunur(self, y, h):
-        y0 = y * self.S - self.kaydir
-        return y0 + h * self.S >= 0 and y0 <= self.ekran_y
-
-    # ── terminal ──
-    def terminal_baslat(self):
-        self.terminal = Terminal(self.c, 0, self.ck.s(UST), self.ekran_g,
-                                 self.ekran_y - self.ck.s(UST), self.S,
-                                 calisma_dizini=os.path.expanduser("~"),
-                                 yazi_boyut=self.terminal_yazi)
-        self.terminal.baslat()
-
-    def _yazi_uygula(self, yeni):
-        if self.terminal:
-            sonuc = self.terminal.yazi_boyut_degistir(yeni)
-            if sonuc != -1:
-                self.terminal_yazi = sonuc
-                self.bildiri = f"Terminal yazı boyutu: {sonuc} px"
-                self.bildiri_zaman = time.monotonic()
+    # ── ölçek ──
+    def _olcek_hesapla(self):
+        if self.ayarlar.get("olcek"):
+            S = float(self.ayarlar["olcek"])
         else:
-            self.terminal_yazi = max(12, min(96, int(yeni)))
-        self.ciz()
+            dpi = self.cikis.dpi if self.cikis is not None else 0.0
+            S = dpi / 96.0 if dpi > 30 else (min(self.w / 1600.0, self.h / 800.0) or 1.0)
+        S = max(0.7, min(3.0, S))
+        # çok küçük ekranlarda ölçeği düşür ki tasarım uzayı kullanılabilir kalsın
+        S = min(S, max(0.75, self.w / 460.0), max(0.75, self.h / 320.0))
+        return max(0.55, S)
 
-    def yazi_buyut(self, olay=None):
-        self._yazi_uygula(self.terminal_yazi + 4); return "break"
+    def _terminal_varsayilan(self):
+        yazi = self.ayarlar.get("terminal_yazi")
+        if yazi:
+            return int(yazi)
+        return int(max(13, min(34, 14 * self.S)))
 
-    def yazi_kucult(self, olay=None):
-        self._yazi_uygula(self.terminal_yazi - 4); return "break"
+    # ── hangi kartlar gösterilecek ──
+    def _aktif_kartlar(self, v):
+        hazir = []
+        istenen = self.ayarlar.get("kartlar") or list(yerlesim.KART_BILGI)
+        for k in istenen:
+            if k not in yerlesim.KART_BILGI:
+                continue
+            if k == "pil" and (v.get("pil") or {}).get("yok"):
+                continue
+            if k == "gpu" and (v.get("gpu") or {}).get("yok"):
+                continue
+            if k == "yedek" and (v.get("yedek") or {}).get("yok"):
+                continue
+            if k == "sicaklik" and not (v.get("sicaklik") or {}).get("sensor_var"):
+                continue
+            hazir.append(k)
+        return hazir or ["cpu", "bellek"]
 
-    def yazi_sifirla(self, olay=None):
-        self._yazi_uygula(self._terminal_yazi_otomatik()); return "break"
+    def _plan(self, v):
+        kartlar = self._aktif_kartlar(v)
+        otomatik = bool(self.ayarlar.get("otomatik_kart", True))
+        imza = (tuple(kartlar), self.tasarim_g, self.tasarim_y, otomatik)
+        if imza != self._son_imza:
+            self._son_plan = yerlesim.planla(self.tasarim_g, self.tasarim_y, kartlar,
+                                             otomatik=otomatik)
+            self._son_imza = imza
+        return self._son_plan
 
-    def gorunum_degistir(self, yeni):
-        if yeni == "terminal" and not self.terminal_etkin:
+    # ── düğmeler (üst şeritte sabit) ──
+    def _dugmeler(self, TG):
+        kg = min(44.0, max(30.0, TG * 0.08))
+        kapat = (TG - 14 - kg, 5, kg, 36)
+        bt = min(200.0, max(60.0, TG * 0.24))
+        terminal = (kapat[0] - 8 - bt, 5, bt, 36)
+        bp = min(176.0, max(56.0, TG * 0.22))
+        pano_d = (terminal[0] - 8 - bp, 5, bp, 36)
+        return {"pano": pano_d, "terminal": terminal, "kapat": kapat}
+
+    # ── ana çizim döngüsü ──
+    def ciz(self):
+        if self._kapali:
             return
-        self.gorunum = yeni
-        if yeni == "terminal":
-            if self.terminal is None:
-                self.terminal_baslat()
-            else:
-                self.terminal.boyut_ayarla(self.ekran_g, self.ekran_y - self.ck.s(UST))
-                self.terminal.kirli = True
-        self.kok.focus_force()
-        self.c.focus_set()
-        self.ciz()
+        v = self.t.al()
+        if not v:
+            self.kok.after(300, self.ciz)
+            return
+        for ad, deger in (("cpu", (v.get("cpu") or {}).get("yuzde")),
+                          ("bellek", (v.get("bellek") or {}).get("yuzde")),
+                          ("sicaklik", (v.get("sicaklik") or {}).get("paket")),
+                          ("pil", (v.get("pil") or {}).get("yuzde")),
+                          ("gpu", self._igpu_kullanim(v)),
+                          ("dgpu", ((v.get("gpu") or {}).get("nvidia") or {}).get("yuzde")),
+                          ("ag_in", (v.get("ag") or {}).get("inen")),
+                          ("ag_out", (v.get("ag") or {}).get("giden"))):
+            try:
+                self.gecmis[ad].append(float(deger if deger is not None else 0.0))
+            except Exception:
+                pass
+
+        self.c.delete("all")
+        plan = self._plan(v) if self.gorunum == "pano" else None
+        self._icerik_ciz(v, plan)
+        if self.gorunum == "terminal":
+            if self.terminal:
+                self.terminal.ciz(zorla=True)
+            self.kok.after(500, self.ciz)
+        else:
+            self._mercek_ciz(v)
+            self.kok.after(max(200, int(self.ayarlar.get("guncelleme_ms", 1000))), self.ciz)
+
+    @staticmethod
+    def _igpu_kullanim(v):
+        for k in ((v.get("gpu") or {}).get("kartlar") or []):
+            if k.get("kullanim") is not None:
+                return k["kullanim"]
+        return None
+
+    def _icerik_ciz(self, v, plan):
+        c = self.cek
+        # kaydırma sınırları
+        if plan:
+            self._max_kaydir = max(0.0, plan["icerik_y"] * self.S - self.h)
+        else:
+            self._max_kaydir = 0.0
+        self.kaydir = max(0.0, min(self.kaydir, self._max_kaydir))
+
+        # kartlar (kaydırmalı)
+        c.kaydir_ayarla(self.kaydir)
+        if plan:
+            for kid, (x, y, w, h) in plan["kartlar"].items():
+                # ekran dışında kalan kartı hiç çizme (kaydırmada hız kazancı)
+                if (y + h) * self.S - self.kaydir < 0 or y * self.S - self.kaydir > self.h:
+                    continue
+                fonk = kartlar_modul.CIZIM.get(kid)
+                if fonk:
+                    try:
+                        fonk(c, x, y, w, h, v, self.gecmis)
+                    except Exception as hata:
+                        c.yazi(x + 14, y + h / 2, f"kart hatası: {hata}"[:44], 10,
+                               c.renk["kirmizi"])
+        # üst şerit ve alt bilgi kaydırmadan etkilenmez
+        c.kaydir_ayarla(0.0)
+        self._ustluk_ciz(v)
+        self._altbilgi_ciz(v, plan)
+        self._bildiri_ciz()
+        self._kaydirma_gostergesi()
+
+    def _kaydirma_gostergesi(self):
+        """İçerik ekrana sığmıyorsa sağ kenarda ince bir kaydırma çubuğu."""
+        if self._max_kaydir <= 1:
+            return
+        oran = self.h / (self.h + self._max_kaydir)
+        yuk = max(30.0, oran * self.h)
+        ust = (self.kaydir / self._max_kaydir) * (self.h - yuk)
+        self.cek.dik_ekran(self.w - 7, ust, self.w - 3, ust + yuk, self.R["soluk"])
+
+    def _metin_gen(self, metin, boyut, kalin=False):
+        """Metnin tasarım birimi cinsinden genişliği (üst şerit kaydırmasız)."""
+        try:
+            f = self.cek._yazi_tipi(boyut, kalin)[0]
+            return f.measure(str(metin)) / self.cek.S
+        except Exception:
+            return len(str(metin)) * boyut * 0.62
+
+    def _ustluk_ciz(self, v):
+        c, R = self.cek, self.R
+        TG = self.tasarim_g
+        c.dik(0, 0, TG, 46, R["ustluk"])
+        c.dik(0, 46, TG, 46.8, R["kenar"])
+        s = v.get("sistem") or {}
+        up = int(s.get("uptime_sn", 0))
+        baslik = "▣  SYSPANO" if self.gorunum == "pano" else "▶  TERMINAL"
+        c.yazi(18, 23, baslik, 12, R["mavi"], True)
+
+        # orta bilgi: düğmelere çarpmayacak en uzun sürüm seçilir
+        dugmeler = self._dugmeler(TG)
+        sol, sag = 132.0, dugmeler["pano"][0] - 12.0
+        adaylar = [
+            f"{s.get('ad', '?')}  ·  {time.strftime('%H:%M:%S')}  ·  "
+            f"açık {up // 3600}sa {(up % 3600) // 60}dk",
+            f"{s.get('ad', '?')}  ·  {time.strftime('%H:%M:%S')}",
+            time.strftime("%H:%M:%S"),
+        ]
+        for metin in adaylar:
+            if sag - sol > 40 and self._metin_gen(metin, 11.5, True) <= sag - sol:
+                c.yazi(sol, 23, metin, 11.5, R["yazi"], True, "w")
+                break
+
+        for ad, (dx, dy, dw, dh) in dugmeler.items():
+            secili = (ad == self.gorunum)
+            c.dik(dx, dy, dx + dw, dy + dh, R["mavi"] if secili else R["dugme"], R["kenar"])
+            etiket = {"pano": "▤ Pano", "terminal": "⌨ Terminal", "kapat": "✕"}[ad]
+            if dw < 74:
+                etiket = {"pano": "▤", "terminal": "⌨", "kapat": "✕"}[ad]
+            c.yazi(dx + dw / 2, dy + dh / 2 + 1, etiket, 11,
+                   R["arka"] if secili else R["yazi"], secili, "center")
+
+    def _bildiri_ciz(self):
+        if not (self.bildiri and time.monotonic() - self.bildiri_zaman < 2.5):
+            return
+        c, R = self.cek, self.R
+        g = self._metin_gen(self.bildiri, 12, True)
+        bx, by = self.tasarim_g / 2.0, self.tasarim_y - 34
+        c.dik(bx - g / 2 - 14, by - 12, bx + g / 2 + 14, by + 12, R["dugme"], R["mavi"])
+        c.yazi(bx, by, self.bildiri, 12, R["yazi"], True, "center")
+
+    def _altbilgi_ciz(self, v, plan):
+        c, R = self.cek, self.R
+        ekran = self.cikis.ad if self.cikis else "tüm ekran"
+        parcalar = [f"{self.w}x{self.h} ({ekran})", f"ölçek {self.S:.2f}"]
+        if plan and self.tasarim_g > 620:
+            parcalar.append(f"{plan['sutun']} sütun")
+            if plan["gizli"]:
+                parcalar.append(f"gizli {len(plan['gizli'])}")
+            if plan["kaydirilir"] or self._max_kaydir > 1:
+                parcalar.append("kaydırılabilir")
+        c.yazi(14, self.tasarim_y - 6, "  ·  ".join(parcalar), 10, R["cok_soluk"],
+               False, "sw")
+        # sağdaki uzun metin yalnızca yer varsa (çakışmasın)
+        if self.tasarim_g > 1000:
+            c.yazi(self.tasarim_g - 14, self.tasarim_y - 6,
+                   f"{os.uname().release[:20]}  ·  SysPano", 10, R["cok_soluk"], False, "se")
+        elif self.tasarim_g > 620:
+            c.yazi(self.tasarim_g - 14, self.tasarim_y - 6, "SysPano", 10,
+                   R["cok_soluk"], False, "se")
 
     # ── büyüteç ──
-    def fare(self, olay):
+    def _fare(self, olay):
         yeni = (olay.x, olay.y)
         if self.mercek is not None and (
                 abs(yeni[0] - self.mercek[0]) + abs(yeni[1] - self.mercek[1]) > MERCEK_TOLERANS):
@@ -326,7 +354,7 @@ class Pano:
         self.mercek_yer = yeni
         self.mercek_zaman = time.monotonic()
 
-    def fare_cikti(self, _olay=None):
+    def _fare_cikti(self, _olay=None):
         self.mercek_yer = None
         self._mercek_gizle()
 
@@ -336,144 +364,182 @@ class Pano:
             self.c.delete("mercek")
 
     def _mercek_denetle(self):
+        if self._kapali:
+            return
         yer = self.mercek_yer
-        uygun = (self.buyutec and self.gorunum == "pano" and yer is not None
-                 and self.ekran_y - yer[1] > self.ck.s(MERCEK_UST_SINIR)
+        uygun = (self.ayarlar.get("buyutec", True) and self.gorunum == "pano"
+                 and yer is not None and yer[1] >= self.cek.s(MERCEK_UST_SINIR)
                  and time.monotonic() - self.mercek_zaman >= MERCEK_BEKLEME)
         if uygun:
             if self.mercek is None:
                 self.mercek = yer
-                self.mercek_ciz()
+                self._mercek_ciz(self.t.al())
         else:
             self._mercek_gizle()
         self.kok.after(100, self._mercek_denetle)
 
-    def mercek_ciz(self, v=None):
-        self.c.delete("mercek")
-        if self.mercek is None or self.gorunum != "pano":
-            return
-        if v is None:
-            v = self.t.al()
-        if not v:
+    def _mercek_ciz(self, v):
+        c = self.cek
+        if self.mercek is None or self.gorunum != "pano" or not v:
             return
         mx, my = self.mercek
-        r = MERCEK_YARICAP * self.S
-        cx = min(max(mx, r), self.ekran_g - r)
-        cy = min(max(my, r), self.ekran_y - r)
-
-        self.c.create_oval(cx - r, cy - r, cx + r, cy + r,
-                           fill=self.renk["arka"], outline="", tags="mercek")
-        self.ck.kaydir_ayarla(self.kaydir)
-        self.ck.zoom_baslat(mx, my, MERCEK_ZOOM, cx, cy)
-        self.ck.kirp_baslat(cx, cy, r, "mercek")
+        r = min(170.0, self.tasarim_g * 0.22) * self.S
+        cx = min(max(mx, r), self.w - r)
+        cy = min(max(my, r), self.h - r)
+        c.c.create_oval(cx - r, cy - r, cx + r, cy + r, fill=self.R["arka"],
+                        outline="", tags="mercek")
+        c.kaydir_ayarla(self.kaydir)
+        c.zoom_baslat(mx, my, MERCEK_ZOOM, cx, cy)
+        c.kirp_baslat(cx, cy, r)
         try:
-            self._kartlari_ciz(v)
+            plan = self._plan(v)
+            for kid, (x, y, w, h) in plan["kartlar"].items():
+                fonk = kartlar_modul.CIZIM.get(kid)
+                if fonk:
+                    fonk(c, x, y, w, h, v, self.gecmis)
         finally:
-            self.ck.kirp_bitir()
-            self.ck.zoom_bitir()
-            self.ck.kaydir_ayarla(0)
-        self.c.create_oval(cx - r, cy - r, cx + r, cy + r,
-                           outline=self.renk["mavi"], width=max(2, int(2 * self.S)),
-                           tags="mercek")
+            c.kirp_bitir()
+            c.zoom_bitir()
+            c.kaydir_ayarla(0.0)
+        c.c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=self.R["mavi"],
+                        width=max(2, int(2 * self.S)), tags="mercek")
 
-    # ── çizim ──
-    def _gecmise_ekle(self, v):
-        for ad, deger in (("cpu", (v.get("cpu") or {}).get("yuzde")),
-                          ("bellek", (v.get("bellek") or {}).get("yuzde")),
-                          ("sicaklik", (v.get("sicaklik") or {}).get("paket")),
-                          ("pil", (v.get("pil") or {}).get("yuzde")),
-                          ("gpu", ((v.get("gpu") or {}).get("kartlar") or [{}])[0].get("kullanim")
-                           if (v.get("gpu") or {}).get("kartlar") else 0.0),
-                          ("dgpu", ((v.get("gpu") or {}).get("nvidia") or {}).get("yuzde")),
-                          ("ag_in", (v.get("ag") or {}).get("inen")),
-                          ("ag_out", (v.get("ag") or {}).get("giden"))):
-            self.gecmis[ad].append(float(deger if deger is not None else 0.0))
+    # ── fare / tıklama / kaydırma ──
+    def _basildi(self, olay):
+        self._tiklama = (olay.x, olay.y, self.kaydir)
 
-    def _kartlari_ciz(self, v):
-        for ad, (x, y, w, h) in self.plan["kartlar"].items():
-            if not self._kart_gorunur(y, h):
-                continue
-            cizim = kartlar.CIZIM.get(ad)
-            if cizim:
-                cizim(self.ck, x, y, w, h, v, self.gecmis)
-
-    def ciz(self):
-        v = self.t.al()
-        if not v:
-            self.kok.after(200, self.ciz)
+    def _surukle(self, olay):
+        if self._tiklama is None or self._max_kaydir <= 0:
             return
-        self._gecmise_ekle(v)
-        self.c.delete("all")
+        self.kaydir = max(0.0, min(self._max_kaydir,
+                                   self._tiklama[2] - (olay.y - self._tiklama[1])))
+        self._mercek_gizle()
+        self.ciz()
 
-        # üst şerit her zaman sabit (kaydırmadan etkilenmez)
-        self.ck.kaydir_ayarla(0)
-        self._ust_ciz(v)
-
-        if self.gorunum == "terminal":
-            if self.terminal:
-                self.terminal.ciz(zorla=True)
-            self.kok.after(500, self.ciz)
+    def _birakildi(self, olay):
+        if self._tiklama is None:
             return
-
-        self.ck.kaydir_ayarla(self.kaydir)
-        self._kartlari_ciz(v)
-        self.ck.kaydir_ayarla(0)
-        self._kaydirma_gostergesi()
-        self.mercek_ciz(v)
-        self.kok.after(max(200, int(self.ayar.get("guncelleme_ms", 1000))), self.ciz)
-
-    def _ust_ciz(self, v):
-        w = self.TG
-        self.ck.dik(0, 0, w, UST, self.renk["ustluk"])
-        etiket = ("▣  SİSTEM PANOSU" if self.gorunum == "pano" else "▶  TERMİNAL")
-        self.ck.yazi(18, UST / 2, etiket, 12, self.renk["mavi"], True)
-
-        s = v.get("sistem") or {}
-        ad = s.get("ad", "-")
-        saat = time.strftime("%H:%M:%S")
-        self.ck.yazi(w / 2, UST / 2 - 6, f"{ad}   ·   {saat}", 12, self.renk["yazi"],
-                     True, "center")
-        ust = int(time.monotonic() - self.baslangic)
-        alt = f"açık {ust // 3600}sa {(ust % 3600) // 60}dk"
-        if self.dpi:
-            alt += f"  ·  {self.dpi:.0f} dpi"
-        self.ck.yazi(w / 2, UST / 2 + 10, alt, 10, self.renk["cok_soluk"], False, "center")
-
-        if self.bildiri and time.monotonic() - self.bildiri_zaman < 2.5:
-            self.ck.yazi(w / 2, UST + 12, self.bildiri, 12, self.renk["mavi"],
-                         True, "center")
-
-        for ad_, (bx, by, bw, bh) in self.dugme_yerleri(w).items():
-            secili = (ad_ == self.gorunum)
-            arka = self.renk["mavi"] if secili else self.renk["dugme"]
-            on = self.renk["arka"] if secili else self.renk["yazi"]
-            self.ck.dik(bx, by, bx + bw, by + bh, arka, self.renk["kenar"])
-            yazi = {"pano": "▤ Pano", "terminal": "⌨ Terminal", "kapat": "✕"}[ad_]
-            self.ck.yazi(bx + bw / 2, by + bh / 2 + 1, yazi, 11, on, secili, "center")
-
-    def _kaydirma_gostergesi(self):
-        if not self._kaydirilir():
+        bx, by, _ = self._tiklama
+        self._tiklama = None
+        if abs(olay.x - bx) + abs(olay.y - by) > 8:
             return
-        toplam = self.icerik_y * self.S
-        oran = self.ekran_y / toplam
-        yuk = max(30, oran * self.ekran_y)
-        ust = (self.kaydir / max(1.0, toplam - self.ekran_y)) * (self.ekran_y - yuk)
-        x = self.ekran_g - 6
-        self.c.create_rectangle(x, ust, x + 4, ust + yuk,
-                                fill=self.renk["soluk"], outline="", tags="kaydirma")
+        dx, dy = olay.x / self.S, olay.y / self.S      # üst şerit kaydırmasız
+        for ad, (qx, qy, qw, qh) in self._dugmeler(self.tasarim_g).items():
+            if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
+                if ad == "kapat":
+                    self.kapat()
+                else:
+                    self.gorunum_degistir(ad)
+                return
+        if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
+            self.terminal_baslat()
+            self.kok.focus_force()
+            self.c.focus_set()
+            return
+        self.kok.focus_force()
+        self.c.focus_set()
+
+    def _tekerlek(self, olay):
+        if self.gorunum == "terminal" and self.terminal:
+            return self.terminal.tekerlek(olay)
+        num = getattr(olay, "num", 0)
+        yukari = (getattr(olay, "delta", 0) > 0) or num == 4
+        adim = self.h * 0.18
+        self.kaydir = max(0.0, min(self._max_kaydir,
+                                   self.kaydir - (adim if yukari else -adim)))
+        self._mercek_gizle()
+        self.ciz()
+
+    def _tus(self, olay):
+        if olay.state & 0x4:
+            k = olay.keysym
+            if k in ("plus", "equal", "KP_Add"):
+                self._yazi_degistir(+2)
+                return "break"
+            if k in ("minus", "underscore", "KP_Subtract"):
+                self._yazi_degistir(-2)
+                return "break"
+            if k in ("0", "KP_0"):
+                self._yazi_sifirla()
+                return "break"
+        if self.gorunum == "terminal" and self.terminal:
+            return self.terminal.tus(olay)
+        return None
+
+    # ── görünüm ──
+    def gorunum_degistir(self, yeni):
+        if yeni == "terminal" and not self.ayarlar.get("terminal", True):
+            self.bildiri = "terminal kapalı (yapılandırma)"
+            self.bildiri_zaman = time.monotonic()
+            return
+        self.gorunum = yeni
+        if yeni == "terminal":
+            if self.terminal is None:
+                self.terminal_baslat()
+            else:
+                self.terminal.boyut_ayarla(self.w, self.h - int(46 * self.S))
+                self.terminal.kirli = True
+        self._mercek_gizle()
+        self.kok.focus_force()
+        self.c.focus_set()
+        self.ciz()
+
+    def terminal_baslat(self):
+        self.terminal = Terminal(self.c, 0, int(46 * self.S), self.w,
+                                 self.h - int(46 * self.S), self.S,
+                                 calisma_dizini=os.path.expanduser("~"),
+                                 yazi_boyut=self.terminal_yazi,
+                                 yazi_ailesi=self.cek.yazi_ailesi)
+        self.terminal.baslat()
+
+    def _yazi_degistir(self, fark):
+        if not self.terminal:
+            self.bildiri = "önce terminali açın"
+            self.bildiri_zaman = time.monotonic()
+            if self.gorunum == "pano":
+                self.ciz()
+            return "break"
+        yeni = max(12, min(96, self.terminal_yazi + fark * 2))
+        sonuc = self.terminal.yazi_boyut_degistir(yeni)
+        if sonuc != -1:
+            self.terminal_yazi = sonuc
+            self.ayarlar["terminal_yazi"] = sonuc
+            try:
+                ayar_modul.yaz(self.ayarlar)
+            except Exception:
+                pass
+            self.bildiri = f"terminal yazı boyutu: {sonuc} px"
+            self.bildiri_zaman = time.monotonic()
+            self.ciz()
+        return "break"
+
+    def _yazi_sifirla(self):
+        if self.terminal:
+            self.ayarlar.pop("terminal_yazi", None)
+            self.terminal_yazi = self._terminal_varsayilan()
+            self.terminal.yazi_boyut_degistir(self.terminal_yazi)
+            try:
+                ayar_modul.yaz(self.ayarlar)
+            except Exception:
+                pass
+            self.bildiri = f"terminal yazı boyutu: {self.terminal_yazi} px"
+            self.bildiri_zaman = time.monotonic()
+            self.ciz()
+        return "break"
 
     # ── tepsi iletişimi ──
-    def _komut_isle(self):
+    def _komut_oku(self):
+        if self._kapali:
+            return
         try:
             if os.path.exists(self.komut_yolu):
                 with open(self.komut_yolu) as f:
                     komut = f.read().strip()
                 os.remove(self.komut_yolu)
-                if komut:
-                    self._komut_calistir(komut)
+                self._komut_calistir(komut)
         except Exception:
             pass
-        self.kok.after(500, self._komut_isle)
+        self.kok.after(500, self._komut_oku)
 
     def _komut_calistir(self, komut):
         if komut == "goster":
@@ -491,11 +557,17 @@ class Pano:
             self.goster()
             self.gorunum_degistir("terminal" if self.gorunum == "pano" else "pano")
         elif komut == "yazi:+":
-            self._yazi_uygula(self.terminal_yazi + 4)
+            self._yazi_degistir(2)
         elif komut == "yazi:-":
-            self._yazi_uygula(self.terminal_yazi - 4)
+            self._yazi_degistir(-2)
         elif komut == "yazi:0":
-            self._yazi_uygula(self._terminal_yazi_otomatik())
+            self._yazi_sifirla()
+        elif komut == "kaydir:+":
+            self.kaydir = min(self._max_kaydir, self.kaydir + self.h * 0.2)
+            self.ciz()
+        elif komut == "kaydir:-":
+            self.kaydir = max(0.0, self.kaydir - self.h * 0.2)
+            self.ciz()
         elif komut == "cikis":
             self.kapat()
 
@@ -503,17 +575,18 @@ class Pano:
         self.kok.deiconify()
         self.kok.lift()
         self.gorunur = True
-        if self._yerlesimci:
-            self.kok.after(250, lambda: self._yerlesimci.yerlestir(deneme=2))
+        self.kok.after(250, self.yer.uygula)
 
     def gizle(self):
         self.kok.withdraw()
         self.gorunur = False
 
     def _durum_yaz(self):
+        if self._kapali:
+            return
         try:
             v = self.t.al() or {}
-            d = {
+            durum = {
                 "zaman": time.time(),
                 "gorunum": self.gorunum,
                 "gorunur": self.gorunur,
@@ -523,26 +596,26 @@ class Pano:
                 "sicaklik": (v.get("sicaklik") or {}).get("paket", 0),
                 "pil": (v.get("pil") or {}).get("yuzde", 0),
             }
-            with open(self.durum_yolu + ".tmp", "w") as f:
-                json.dump(d, f)
-            os.replace(self.durum_yolu + ".tmp", self.durum_yolu)
+            gecici = self.durum_yolu + ".tmp"
+            with open(gecici, "w") as f:
+                json.dump(durum, f)
+            os.replace(gecici, self.durum_yolu)
         except Exception:
             pass
         self.kok.after(3000, self._durum_yaz)
 
-    def _gorev_cubugu_denetle(self):
-        if self._yerlesimci:
-            self._yerlesimci.gorev_cubugu_denetle()
-        self.kok.after(4000, self._gorev_cubugu_denetle)
-
     def kapat(self):
+        self._kapali = True
         for yol in (self.komut_yolu, self.durum_yolu):
             try:
                 os.remove(yol)
             except Exception:
                 pass
         if self.terminal:
-            self.terminal.kapat()
+            try:
+                self.terminal.kapat()
+            except Exception:
+                pass
         try:
             self.kok.destroy()
         except Exception:

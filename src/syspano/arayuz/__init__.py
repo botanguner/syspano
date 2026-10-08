@@ -1,1 +1,1 @@
-"""Gömülü terminal, çizim yardımcıları ve tema (paket)."""
+"""Arayüz katmanı: çizim, yerleşim, kartlar, terminal ve pano."""

@@ -1,16 +1,17 @@
-#!/usr/bin/env bash
-# Depodan doğrudan çalıştırma (kurulum gerekmez):
+#!/bin/bash
+# Kurulum yapmadan doğrudan depodan çalıştırır.
 #
-#   ./run.sh                     panoyu aç (hedef ekranı otomatik seçer)
-#   ./run.sh --liste-ekranlar    ekranları listele
-#   ./run.sh test                tüm testleri çalıştır
-#   ./run.sh --help              tüm seçenekler
-set -euo pipefail
-BURASI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$BURASI"
+#   ./run.sh                      panoyu başlat
+#   ./run.sh --pencere 1200x700   pencere modunda
+#   ./run.sh --liste-ekranlar     ekranları listele
+#   ./run.sh test [dosya]         testleri çalıştır (bkz. tests/run.sh)
 
-case "${1:-}" in
-  test|testler) exec ./tests/run.sh ;;
-esac
+BURASI="$(cd "$(dirname "$0")" && pwd)"
 
-exec env PYTHONPATH="src" python3 -m syspano "$@"
+if [ "$1" = "test" ]; then
+  shift
+  exec "$BURASI/tests/run.sh" "$@"
+fi
+
+export PYTHONPATH="$BURASI/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m syspano "$@"

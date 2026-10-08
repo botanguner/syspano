@@ -2,11 +2,13 @@
 Type=Application
 Name=SysPano
 Name[tr]=SysPano Panosu
-GenericName=System Monitor
 Comment=System and resource monitor dashboard
 Comment[tr]=Sistem ve kaynak izleme panosu
 Exec=@KOMUT@
-Icon=utilities-system-monitor
 Terminal=false
-Categories=System;Monitor;Utility;
-Keywords=system;monitor;cpu;ram;dashboard;pano;
+NoDisplay=true
+# Masaüstüne göre oturum açılışı ipuçları
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
+X-KDE-StartupNotify=false
+Hidden=false
