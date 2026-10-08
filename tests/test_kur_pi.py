@@ -37,6 +37,21 @@ def test_kuru_calistirma_hicbir_seyi_degistirmez():
         assert yazilanlar == [], f"kuru çalıştırma dosya yazdı: {yazilanlar}"
 
 
+def test_kuru_calistirma_var_olani_tekrar_eklemez():
+    """Bekçi satırı zaten varsa kuru çalıştırma 'eklenecek' dememeli."""
+    with tempfile.TemporaryDirectory() as ev:
+        labwc = pathlib.Path(ev) / ".config/labwc"
+        labwc.mkdir(parents=True)
+        (labwc / "autostart").write_text("# mevcut\n/usr/bin/foo &\n"
+                                         "/home/x/.local/bin/syspano --bekci &\n")
+        ortam = dict(os.environ, HOME=ev, XDG_CURRENT_DESKTOP="labwc")
+        c = subprocess.run(["bash", str(BETIK), "--kuru"], capture_output=True,
+                           text=True, env=ortam, timeout=120)
+        assert c.returncode == 0, c.stderr
+        assert "zaten var" in c.stdout, c.stdout
+        assert "eklenecek: " not in c.stdout.replace("(kuru)", ""), c.stdout
+
+
 def test_yardim_metni():
     c = subprocess.run(["bash", str(BETIK), "--help"], capture_output=True, text=True)
     assert c.returncode == 0

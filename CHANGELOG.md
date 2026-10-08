@@ -3,6 +3,17 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.9.1] — 2026-10-09
+
+### Düzeltildi
+- **`kur-pi.sh --kuru` yanlış rapor veriyordu:** bekçi satırı
+  `~/.config/labwc/autostart` içinde **zaten varken** "eklenecek" diyordu
+  (var/yok denetimi yalnız gerçek kurulum yolundaydı). Artık denetim her iki
+  durumda da yapılır; kuru çalıştırma "zaten var" ya da "eklenecek" diye doğru
+  söyler. Pi'de fark edildi (kuru çalıştırma, elle kurulmuş düzeni "eklenecek"
+  diye raporluyordu).
+- 1 yeni test (toplam **19 dosyada 172 test**).
+
 ## [1.9.0] — 2026-10-09
 
 ### Eklendi
