@@ -181,15 +181,21 @@ def _denetim_yaz(sonuc):
     return sonuc
 
 
-def denetle(url=None):
+def denetle(url=None, yerel=None):
     """Yeni sürüm var mı? Ağa çıkar; sonucu diske yazar.
+
+    `yerel` verilmezse çalışan paketin sürümü kullanılır. Güncelleme
+    bittikten hemen sonra paket henüz yeniden başlatılmadığı için eski sürüm
+    bellekte olur; o durumda `yerel` olarak **depodaki** sürüm geçirilir ki
+    yanlış bir "güncelleme var" rozeti kalmasın.
 
     Dönen: {yerel, uzak, yeni, geride, mesaj, yontem, kaynak, zaman}
     """
+    yerel = yerel or __version__
     kayit = kayit_oku()
     kaynak = kayit.get("kaynak")
     sonuc = {
-        "zaman": time.time(), "yerel": __version__,
+        "zaman": time.time(), "yerel": yerel,
         "yontem": kayit.get("yontem", "?"), "kaynak": kaynak,
         "url": url or kayit.get("url") or VARSAYILAN_URL,
         "uzak": None, "yeni": False, "geride": 0, "mesaj": "", "hata": None,
@@ -224,16 +230,16 @@ def denetle(url=None):
                     etiket = etiket.strip().splitlines()[-1] if etiket.strip() else ""
                     if kod == 0 and etiket and not etiket.lower().startswith(("fatal", "usage")):
                         sonuc["uzak"] = etiket
-                        if surum_karsilastir(sonuc["uzak"], __version__) > 0:
+                        if surum_karsilastir(sonuc["uzak"], yerel) > 0:
                             sonuc["yeni"] = True
 
         # kurulu paket ile depodaki kod aynı mı? (git pull yapılıp kurulmamış olabilir)
         depo_surum = _depo_surumu(kaynak)
         sonuc["depo_surum"] = depo_surum
-        if depo_surum and surum_karsilastir(depo_surum, __version__) != 0:
+        if depo_surum and surum_karsilastir(depo_surum, yerel) != 0:
             sonuc["yeni"] = True
             sonuc["kurulum_gerekli"] = True
-            sonuc["mesaj"] = (f"depodaki sürüm {depo_surum}, kurulu paket {__version__}"
+            sonuc["mesaj"] = (f"depodaki sürüm {depo_surum}, kurulu paket {yerel}"
                               " — yeniden kurulum gerekli")
 
     else:
@@ -246,7 +252,7 @@ def denetle(url=None):
             etiketler = etiketleri_ayristir(cikti)
             if etiketler:
                 sonuc["uzak"] = etiketler[-1]
-                sonuc["yeni"] = surum_karsilastir(sonuc["uzak"], __version__) > 0
+                sonuc["yeni"] = surum_karsilastir(sonuc["uzak"], yerel) > 0
 
     return _denetim_yaz(sonuc)
 
@@ -325,9 +331,15 @@ def guncelle(url=None, tekrar_kur=True):
             ekle(kod == 0, "pip --user ile yeniden kuruldu" if kod == 0
                  else f"pip kurulumu başarısız: {cikti.strip()[:200]}")
 
-    kayit_yaz(yontem or "pip-kullanici", kaynak, kayit.get("url"), __version__)
-    sonuc = denetle()
-    ekle(True, f"güncelleme tamam — yerel {sonuc['yerel']}"
+    # Güncelleme bitti: kurulu sürüm artık **depodaki** sürümdür (paket yeniden
+    # kuruldu). Çalışan süreç hâlâ eski sürümü bellekte tuttuğu için denetimi
+    # depo sürümüyle yapıyoruz — yoksa panoda yanlış "güncelleme var" rozeti kalır.
+    yeni_surum = _depo_surumu(kaynak) or __version__
+    kayit_yaz(yontem or "pip-kullanici", kaynak, kayit.get("url"), yeni_surum)
+    sonuc = denetle(yerel=yeni_surum)
+    ekle(True, f"güncelleme tamam — kurulu sürüm {yeni_surum}, güncel"
+         if not sonuc.get("yeni") else
+         f"güncelleme tamam — kurulu sürüm {yeni_surum}"
          + (f", uzak {sonuc['uzak']}" if sonuc.get("uzak") else ""))
     return {"ok": all(ok for ok, _ in adimlar), "adimlar": adimlar,
             "yeniden_baslat": True}
