@@ -11,6 +11,9 @@ Raspberry Pi OS üzerinde çalışır.
 
 ![SysPano ekran görüntüsü](docs/ekran-goruntusu.png)
 
+> **Belgeler:** ayrıntılı kurulum, kullanım, ayarlar ve sorun giderme için
+> **[wiki'ye](https://github.com/botanguner/syspano/wiki)** bakın.
+
 ## Neleri gösteriyor
 
 | Kart | İçerik |
