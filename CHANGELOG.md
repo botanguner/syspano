@@ -3,6 +3,19 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.3.2] — 2026-10-08
+
+### Düzeltildi
+- **Güncelleme sonrası panoda yanlış "güncelleme var" rozeti kalıyordu.**
+  Güncellemeyi çalıştıran süreç eski sürümü bellekte tuttuğu için denetim
+  "depodaki sürüm yeni, kurulu paket eski" sonucunu önbelleğe yazıyordu ve pano
+  bu önbelleği 24 saate kadar gösteriyordu. Artık `guncelleme.guncelle()`
+  denetimi **depodaki sürümle** yapıyor ve kurulum kaydına da yeni sürümü
+  yazıyor. (Canlı sistemde görüldü: Raspberry Pi 1.3.1'e güncellendikten sonra
+  ⚙ düğmesindeki sarı nokta duruyordu.)
+- `guncelleme.denetle(yerel=...)`: çalışan sürüm dışında bir sürümle denetim
+  yapılabiliyor (güncelleme sonrası doğru önbellek için gerekliydi).
+
 ## [1.3.1] — 2026-10-08
 
 ### Düzeltildi

@@ -184,6 +184,52 @@ def test_kirli_agacta_guncellemez():
             del os.environ["XDG_STATE_HOME"]
 
 
+def test_guncelleme_sonrasi_rozet_duzelir():
+    """`guncelle()` sonrası önbellek "güncel" demeli.
+
+    Güncellemeyi çalıştıran süreç **eski sürümü bellekte** tutar. Denetim
+    çalışan sürümle yapılırsa önbelleğe "depodaki sürüm X, kurulu paket Y"
+    yazılır ve panoda güncelleme sonrası yanlış bir rozet kalır. Bu, canlı bir
+    sistemde görüldü (Raspberry Pi: 1.3.1 kurulduktan sonra rozet duruyordu).
+    """
+    if not GIT:
+        print("    (git yok — atlandı)")
+        return
+    with tempfile.TemporaryDirectory() as kok:
+        uzak = os.path.join(kok, "uzak.git")
+        yerel = os.path.join(kok, "yerel")
+        os.makedirs(yerel)
+        subprocess.run([GIT, "init", "--bare", "--initial-branch=main", uzak],
+                       capture_output=True, text=True)
+        _git("init", "--initial-branch=main", cwd=yerel)
+        os.makedirs(os.path.join(yerel, "src", "syspano"))
+        with open(os.path.join(yerel, "src", "syspano", "__init__.py"), "w") as f:
+            f.write('"""x"""\n__version__ = "9.9.9"\n')      # depo sürümü
+        _git("add", "-A", cwd=yerel)
+        _git("commit", "-m", "surum 9.9.9", cwd=yerel)
+        _git("remote", "add", "origin", uzak, cwd=yerel)
+        _git("push", "-u", "origin", "main", cwd=yerel)
+
+        os.environ["XDG_STATE_HOME"] = os.path.join(kok, "durum")
+        try:
+            guncelleme.kayit_yaz("pip-kullanici", yerel, uzak)
+            once = guncelleme.denetle()
+            assert once["kurulum_gerekli"] is True, once
+            assert guncelleme.yeni_surum_var() is True
+
+            cikti = guncelleme.guncelle(tekrar_kur=False)   # yalnız git adımı
+            assert cikti["ok"] is True, cikti
+
+            sonra = guncelleme.denetim_oku()
+            assert not sonra.get("kurulum_gerekli"), sonra
+            assert sonra["yeni"] is False, sonra
+            assert sonra["yerel"] == "9.9.9", sonra
+            assert guncelleme.yeni_surum_var() is False
+            assert "güncel" in guncelleme.metin_ozet()
+        finally:
+            del os.environ["XDG_STATE_HOME"]
+
+
 def test_guncelle_sh_surum_farkini_yakalar():
     """`git pull` yapılıp paket kurulmadıysa guncelle.sh bunu görmeli.
 
