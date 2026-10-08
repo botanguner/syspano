@@ -1,0 +1,88 @@
+name: Hata bildirimi
+description: SysPano'da beklenmeyen bir davranış
+title: "[Hata] "
+labels: ["hata"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Teşekkürler! Aşağıdaki bilgiler sorunu hızlı bulmamıza yardımcı olur.
+        Donanım çeşitliliği fazla olduğu için **ortam** ve **ekran** bilgisi
+        özellikle önemli.
+
+  - type: dropdown
+    id: cihaz
+    attributes:
+      label: Cihaz
+      options:
+        - Raspberry Pi veya benzeri tek kart bilgisayar
+        - Masaüstü / dizüstü
+        - Sanal makine
+        - Diğer
+    validations:
+      required: true
+
+  - type: input
+    id: surum
+    attributes:
+      label: SysPano sürümü
+      description: "`syspano --surum` çıktısı"
+      placeholder: "SysPano 1.2.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: ortam
+    attributes:
+      label: Ortam
+      description: |
+        Şu komutun çıktısını yapıştırın:
+        `python3 -c "import syspano.ortam as o; print(o.dagitim(), o.masaustu(), o.oturum_tipi(), o.makine_modeli())"`
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: ekran
+    attributes:
+      label: Ekranlar
+      description: "`syspano --liste-ekranlar` çıktısı (hedef ekran seçimi için)"
+      render: shell
+
+  - type: textarea
+    id: ne-oldu
+    attributes:
+      label: Ne oldu?
+      description: Beklediğiniz davranış ile gerçekleşen arasındaki fark
+    validations:
+      required: true
+
+  - type: textarea
+    id: adimlar
+    attributes:
+      label: Yeniden üretme adımları
+      placeholder: |
+        1. `syspano --pencere 800x480` çalıştırdım
+        2. Ayar ekranını açıp aşağı kaydırdım
+        3. Pano yanıt vermeyi bıraktı
+    validations:
+      required: true
+
+  - type: textarea
+    id: gunluk
+    attributes:
+      label: Günlük / çıktı
+      description: |
+        Panoyu terminalden çalıştırıp çıktısını ekleyin. Servis olarak
+        çalışıyorsa: `journalctl --user -u syspano -n 40 --no-pager`
+      render: shell
+
+  - type: checkboxes
+    id: kontrol
+    attributes:
+      label: Kontrol listesi
+      options:
+        - label: Güncel sürümü denedim
+          required: true
+        - label: Benzer bir issue olup olmadığına baktım
+          required: true
