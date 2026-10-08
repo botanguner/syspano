@@ -71,4 +71,6 @@ jobs:
           bash -n install.sh
           bash -n uninstall.sh
           bash -n run.sh
+          bash -n guncelle.sh
+          bash -n kur-pi.sh
           bash -n tests/run.sh

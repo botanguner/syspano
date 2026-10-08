@@ -3,6 +3,25 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.9.0] — 2026-10-09
+
+### Eklendi
+- **`kur-pi.sh`: Raspberry Pi / kiosk kurulumu tek komutta.** Bugüne kadar Pi'de
+  elle yapılan adımlar betiğe döküldü:
+  - panoyu **bekçi üzerinden** oturum açılışına ekler (labwc ise
+    `~/.config/labwc/autostart`, değilse XDG `.desktop`),
+  - labwc'de eski XDG girdisini kapatır (çift pano olmasın),
+  - **donma teşhisi için journald'ı kalıcı ama sınırlı** (200 MB) yapar —
+    Raspberry Pi OS varsayılanı `Storage=volatile` olduğu için fiş çekildiğinde
+    günlükler siliniyor ve donma nedeni bulunamıyordu (`--gunluk-yok` ile atlanır),
+  - `--kartlar-ekle pisaglik,loglar` ile yeni kartları yapılandırmaya ekler,
+  - panoyu hemen başlatır (grafik oturumu yoksa bir sonraki açılışa bırakır).
+  - `--kuru` (hiçbir şeyi değiştirmez), `--geri-al` (hepsini geri alır),
+    yedekler `*.bak-<tarih>` olarak saklanır.
+- CI artık `guncelle.sh` ve `kur-pi.sh` için de `bash -n` denetimi yapıyor.
+- 4 yeni test (toplam **19 dosyada 171 test**): betik sözdizimi, kuru
+  çalıştırmanın **hiç dosya yazmaması** (geçici HOME'da), yardım metni.
+
 ## [1.8.2] — 2026-10-09
 
 ### Eklendi
