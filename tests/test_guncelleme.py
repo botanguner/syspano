@@ -244,9 +244,17 @@ def test_guncelle_sh_surum_farkini_yakalar():
         c = subprocess.run(["./guncelle.sh", "--denetle"], cwd=depo, env=ortam,
                            capture_output=True, text=True, timeout=60)
         cikti = c.stdout + c.stderr
-        assert "farklı" in cikti, cikti
+        assert "Düzeltmek için" in cikti, cikti
         assert "1.0.0" in cikti and "1.1.0" in cikti, cikti
         assert c.returncode == 0, cikti
+
+        # 3) paket hiç kurulu değilse bunu açıkça söylemeli
+        if not shutil.which("syspano", path="/usr/local/bin:/usr/bin:/bin"):
+            os.remove(sahte)
+            c = subprocess.run(["./guncelle.sh", "--denetle"], cwd=depo, env=ortam,
+                               capture_output=True, text=True, timeout=60)
+            cikti = c.stdout + c.stderr
+            assert "PATH'te 'syspano' yok" in cikti, cikti
 
 
 

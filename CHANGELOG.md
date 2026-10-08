@@ -3,6 +3,31 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.1.2] — 2026-10-08
+
+### Düzeltildi
+- **Dokunmatikte aşağı kaydırınca pano kilitleniyordu (Pi).** `ciz()` her
+  çağrıldığında sonuna yeni bir çizim zamanlayıcısı kuruyordu; kaydırma ise
+  **her parmak hareketinde** `ciz()` çağırıyordu. İki saniyelik bir kaydırmada
+  saniyede onlarca **kalıcı** çizim döngüsü birikiyor, CPU doyuyor ve arayüz
+  yanıt vermiyordu. Ayar ekranı uzun olduğu için en çok orada görülüyordu.
+  - `ciz()` artık bekleyen zamanlayıcıyı **önce iptal ediyor**: her an en fazla
+    bir çizim planlı. Kaç kez çağrılırsa çağrılsın döngü çoğalmıyor.
+  - Kaydırma sırasında içerik yeniden çizilmek yerine `canvas.move` ile
+    taşınıyor — parmağı takip ediyor ve ucuz. Tam çizim en fazla 150 ms'de bir
+    (fare tekerleğinde 100 ms) yapılıyor; sürükleme bitince bir kez tazeleniyor.
+- `cekim.Cekim.etiket()`: kaydırılabilir içerik "icerik" etiketiyle çiziliyor.
+  Üst şerit, alt bilgi, bildirim ve kaydırma çubuğu etiketsiz kaldığı için
+  kaydırmada yalnızca içerik hareket ediyor.
+- `_icerik_ciz`: ayar ekranının durumu kare başına iki kez hesaplanıyordu
+  (her biri bir dosya okuması); artık bir kez.
+
+### Eklendi
+- `test_uygulama.py`: çizim zamanlayıcılarının **çoğalmadığı** (12 ardışık
+  çizimden sonra bekleyen zamanlayıcı sayısı artmıyor), parmakla kaydırmanın
+  içeriği doğru taşıdığı ve **kaydırdıktan sonra** dokunmanın doğru öğeye
+  isabet ettiği denetleniyor.
+
 ## [1.1.1] — 2026-10-08
 
 ### Düzeltildi

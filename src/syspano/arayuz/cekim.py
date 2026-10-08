@@ -125,6 +125,15 @@ class Cekim:
     def _et(self):
         return (self._etiket,) if self._etiket else ()
 
+    def etiket(self, ad):
+        """Sonraki çizimlere konacak tuval etiketi.
+
+        Kaydırma sırasında içeriği `canvas.move` ile taşıyabilmek için gerekir:
+        içerik öğeleri 'icerik' etiketiyle, üst şerit ve çubuklar etiketsiz
+        çizilir, böylece yalnızca içerik hareket eder.
+        """
+        self._etiket = ad
+
     def _gorunur(self, x0, y0, x1, y1):
         if not self._kirp:
             return True
