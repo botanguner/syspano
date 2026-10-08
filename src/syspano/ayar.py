@@ -23,11 +23,17 @@ VARSAYILAN = {
     # true | false | "auto": auto → yalnızca faresinin olduğu, yeterince geniş
     # ekranlarda açılır (dokunmatik panellerde kendiliğinden kapalı).
     "buyutec": "auto",
-    "fare_ile_kaydirma": True,
     "terminal": True,
     "terminal_yazi": None,      # None → ölçeğe göre; px cinsinden sayı → sabit
     "tepsi": True,
     "guncelleme_ms": 1000,
+    # açılışta ve günde bir kez yeni sürüm denetimi (ağa çıkar; false → hiç çıkmaz)
+    "guncelleme_denetimi": True,
+    # yer yetmezse düşük öncelikli kartları gizle (ayar ekranındaki anahtar)
+    "otomatik_kart": True,
+    # GDrive yedeği: YEDEK kartının okuduğu durum dosyası ve systemd timer adı
+    "yedek_durum_yolu": "~/.local/state/gdrive-yedek/durum.json",
+    "yedek_zamanlayici": "yedek.timer",
     # systemd servisleri: ek olarak izlenecek birimler (ör. ["apache2", "mysql"])
     "servisler": [],
     # birim → log dosyası (ör. {"apache2": "/var/log/apache2/error.log"})
@@ -35,7 +41,6 @@ VARSAYILAN = {
     "servis_aralik": 30,        # saniye; servis durumu bu aralıkta okunur (düşürülebilir)
     "servis_log_satir": 200,    # günlük görüntüleyicide gösterilecek satır
     "uygulama_basligi": "SysPano",
-    "saydam_olmayan": True,
 }
 
 
