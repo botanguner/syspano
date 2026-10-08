@@ -1,6 +1,6 @@
 [Unit]
 Description=SysPano sistem ve kaynak izleme panosu
-Documentation=https://github.com/ornek/syspano
+Documentation=https://github.com/botanguner/syspano
 After=graphical-session.target
 PartOf=graphical-session.target
 
