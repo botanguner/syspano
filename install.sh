@@ -84,17 +84,38 @@ fi
 if [ "$YONTEM" = "sistem" ]; then
   bilgi "Sistem geneline kuruluyor (sudo pip)"
   sudo python3 -m pip install --break-system-packages "$BURASI"
+  KURULUM_YONTEMI="pip-sistem"
 else
   if command -v pipx >/dev/null; then
     bilgi "pipx ile kuruluyor"
     pipx install --force "$BURASI"
     pipx ensurepath >/dev/null 2>&1 || true
+    KURULUM_YONTEMI="pipx"
   else
     bilgi "Kullanıcı dizinine kuruluyor (pip install --user)"
     python3 -m pip install --user --upgrade "$BURASI" 2>/dev/null \
       || python3 -m pip install --user --break-system-packages --upgrade "$BURASI"
+    KURULUM_YONTEMI="pip-kullanici"
   fi
 fi
+
+# ── kurulum kaydı: güncelleyici (guncelle.sh / syspano --guncelle) bunu okur ──
+KAYIT_DIZINI="${XDG_STATE_HOME:-$HOME/.local/state}/syspano"
+mkdir -p "$KAYIT_DIZINI"
+python3 - "$KAYIT_DIZINI" "$KURULUM_YONTEMI" "$BURASI" <<'PY' || true
+import json, os, sys, time
+dizin, yontem, kaynak = sys.argv[1:4]
+veri = {
+    "yontem": yontem,
+    "kaynak": os.path.abspath(kaynak),
+    "url": "https://github.com/botanguner/syspano.git",
+    "surum": "kuruldu",
+    "tarih": time.strftime("%Y-%m-%d %H:%M:%S"),
+}
+with open(os.path.join(dizin, "kurulum.json"), "w") as f:
+    json.dump(veri, f, indent=2, ensure_ascii=False)
+print("    Kurulum kaydı: " + os.path.join(dizin, "kurulum.json"))
+PY
 
 KOMUT="$(command -v syspano || true)"
 [ -z "$KOMUT" ] && KOMUT="$HOME/.local/bin/syspano"
@@ -126,5 +147,8 @@ bilgi "Hazır. Denemek için:"
 echo "    syspano --liste-ekranlar       # ekranları gör"
 echo "    syspano --pencere 1200x700     # pencerede dene"
 echo "    syspano                        # hedef ekranı otomatik seç ve başlat"
+echo
+echo "Güncelleme:  ./guncelle.sh            (ya da: syspano --guncelle)"
+echo "Denetleme :  ./guncelle.sh --denetle  (ya da: syspano --guncelle-denetle)"
 echo
 echo "Tepsi simgesini isterseniz: pip install PySide6"

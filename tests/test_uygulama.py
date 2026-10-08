@@ -160,6 +160,78 @@ def test_buyutec_gercek_hareket_ister():
         p.kapat()
 
 
+def test_ayar_ekrani_dokunma():
+    """Ayar ekranında dokunma: anahtar ve tema değişmeli, yapılandırmaya yazılmalı."""
+    import json
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["SYSPANO_YAPILANDIRMA_DIZINI"] = d
+        p = None
+        try:
+            p = _pano_olustur(terminal=True, tema="koyu")
+            if p is None:
+                return
+            _bekle(p, 1.0)
+            p.gorunum_degistir("ayar")
+            assert p._ayar_plan and p._ayar_plan["kutular"], "ayar yerleşimi yok"
+
+            def dokun(rect):
+                """Tasarım dikdörtgeninin ortasına dokunma olayı üret."""
+                x, y, w, h = rect
+                dx, dy = x + w / 2, y + h / 2
+
+                class Olay:
+                    pass
+
+                o = Olay()
+                o.x = int(dx * p.S)
+                o.y = int(dy * p.S - p.kaydir)
+                p._basildi(o)
+                p._birakildi(o)
+
+            # 1) terminal anahtarını kapat
+            kutu = p._ayar_kutusu("terminal")
+            assert kutu and kutu["deger"] is True
+            dokun(kutu["anahtar"])
+            assert p.ayarlar["terminal"] is False, "terminal anahtarı değişmedi"
+
+            # 2) tema seçeneği
+            kutu = p._ayar_kutusu("tema")
+            acik = [r for dg, _e, r in kutu["secenekler"] if dg == "acik"][0]
+            dokun(acik)
+            assert p.ayarlar["tema"] == "acik"
+            assert p.R["ad"] == "acik", "tema canlı uygulanmadı"
+
+            # 3) kart anahtarını kapat
+            kutu = p._ayar_kutusu("kart:cekirdek")
+            assert kutu and kutu["deger"] is True
+            dokun(kutu["anahtar"])
+            assert "cekirdek" not in p.ayarlar["kartlar"]
+
+            # yapılandırma dosyasına yazıldı mı?
+            with open(os.path.join(d, "config.json")) as f:
+                kayitli = json.load(f)
+            assert kayitli.get("tema") == "acik", kayitli
+            assert kayitli.get("terminal") is False, kayitli
+            assert "cekirdek" not in (kayitli.get("kartlar") or []), kayitli
+
+            # 4) "Oto" düğmesi ölçeği DPI otomatiğine döndürmeli
+            p.ayarlar["olcek"] = 1.9
+            p._ayar_isle("olcek_oto", "dugme", None)
+            assert p.ayarlar["olcek"] is None
+
+            # 5) ölçek değişince tasarım uzayı güncellenmeli
+            onceki = p.tasarim_g
+            p._ayar_isle("olcek", "sec", 1.6)
+            assert p.ayarlar["olcek"] == 1.6
+            assert p.tasarim_g != onceki
+            assert abs(p.cek.S - p.S) < 1e-9
+        finally:
+            os.environ.pop("SYSPANO_YAPILANDIRMA_DIZINI", None)
+            if p is not None:
+                p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback

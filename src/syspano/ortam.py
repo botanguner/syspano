@@ -84,6 +84,12 @@ def veri_dizini():
         os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "syspano")
 
 
+def kalici_durum_dizini():
+    """Kalıcı durum dosyaları (kurulum kaydı, sürüm denetimi)."""
+    return os.path.join(
+        os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "syspano")
+
+
 def emin_ol(yol):
     try:
         os.makedirs(yol, exist_ok=True)

@@ -160,6 +160,15 @@ class Cekim:
         self.c.create_oval(x0, y0, x1, y1, fill=dolgu, outline=cerceve,
                            width=kalinlik, tags=self._et())
 
+    def oval(self, x0, y0, x1, y1, dolgu="", cerceve="", kalinlik=1):
+        """Tasarım biriminde elips — dikdörtgen gibi ölçeklenir.
+
+        (Ham `create_oval` tuval pikseli bekler; tasarım koordinatıyla
+        çağrılırsa ölçek uygulanmaz ve daireler yanlış yere düşer.)
+        """
+        self.oval_ekran(self.sx(x0), self.sy(y0), self.sx(x1), self.sy(y1), dolgu,
+                        cerceve, max(1, int(kalinlik * self.S * self._donusum[2])))
+
     def cokgen(self, noktalar, dolgu, stipple=""):
         xs = [p[0] for p in noktalar]
         ys = [p[1] for p in noktalar]

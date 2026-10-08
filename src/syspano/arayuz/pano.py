@@ -11,6 +11,8 @@ Uyarlanabilirlik üç yerden gelir:
 
 import json
 import os
+import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -20,6 +22,7 @@ from .. import ayar as ayar_modul
 from .. import ortam
 from ..toplayici import Toplayici
 from ..yerlestir import Yerlestirici
+from . import ayar_ekrani
 from . import kartlar as kartlar_modul
 from . import tema
 from . import yerlesim
@@ -35,11 +38,13 @@ GECMIS_UZUNLUK = 240
 
 
 class Pano:
-    def __init__(self, ayarlar, cikis=None, mod="ekran"):
+    def __init__(self, ayarlar, cikis=None, mod="ekran", cikislar=None):
         self.ayarlar = ayarlar
         self.cikis = cikis
         self.mod = mod
+        self.cikislar = list(cikislar or ([cikis] if cikis else []))
         self.sinif = "syspano"
+        self._baslangic_argv = list(sys.argv[1:])   # yeniden başlatmada aynı seçenekler
         self.R = tema.tema_sec(ayarlar.get("tema", "koyu"))
 
         # ── geometri (X11/Xwayland piksel uzayı) ──
@@ -63,7 +68,9 @@ class Pano:
         self.tasarim_y = max(240, int(round(self.h / self.S)))
 
         # ── durum ──
-        self.gorunum = "pano"                 # "pano" | "terminal"
+        self.gorunum = "pano"                 # "pano" | "terminal" | "ayar"
+        if ayarlar.get("baslangic_gorunumu") in ("pano", "terminal", "ayar"):
+            self.gorunum = ayarlar["baslangic_gorunumu"]
         self.terminal = None
         self.gorunur = True
         self.kaydir = 0.0
@@ -71,6 +78,10 @@ class Pano:
         self._tiklama = None
         self._son_plan = None
         self._son_imza = None
+        self._ayar_plan = None                # ayar ekranının son yerleşimi
+        self._kaydirici = None                # sürüklenen kaydırıcı (id, ...)
+        self._guncelleme_var = False          # önbellekteki denetim sonucu
+        self._guncelleme_kontrol = 0.0
         self.bildiri = ""
         self.bildiri_zaman = 0.0
         self.t = Toplayici(ayarlar)
@@ -140,6 +151,9 @@ class Pano:
         self.kok.after(300, self._komut_oku)
         self.kok.after(2000, self._durum_yaz)
         self.kok.after(600, self._mercek_denetle)
+        # güncelleme denetimi: önbellek eskimişse arka planda bir kez
+        if ayarlar.get("guncelleme_denetimi", True):
+            self.kok.after(9000, self._guncelleme_denetimi)
         if ayarlar.get("test_suresi"):
             self.kok.after(int(ayarlar["test_suresi"]) * 1000, self.kapat)
         self.ciz()
@@ -192,13 +206,14 @@ class Pano:
 
     # ── düğmeler (üst şeritte sabit) ──
     def _dugmeler(self, TG):
-        kg = min(44.0, max(30.0, TG * 0.08))
+        kg = min(44.0, max(28.0, TG * 0.08))
         kapat = (TG - 14 - kg, 5, kg, 36)
-        bt = min(200.0, max(60.0, TG * 0.24))
-        terminal = (kapat[0] - 8 - bt, 5, bt, 36)
-        bp = min(176.0, max(56.0, TG * 0.22))
+        ayar = (kapat[0] - 8 - kg, 5, kg, 36)
+        bt = min(200.0, max(54.0, TG * 0.22))
+        terminal = (ayar[0] - 8 - bt, 5, bt, 36)
+        bp = min(176.0, max(50.0, TG * 0.20))
         pano_d = (terminal[0] - 8 - bp, 5, bp, 36)
-        return {"pano": pano_d, "terminal": terminal, "kapat": kapat}
+        return {"pano": pano_d, "terminal": terminal, "ayar": ayar, "kapat": kapat}
 
     # ── ana çizim döngüsü ──
     def ciz(self):
@@ -222,6 +237,10 @@ class Pano:
                 pass
 
         self.c.delete("all")
+        # güncelleme noktası: önbelleği yarım dakikada bir tazele (ağa çıkmaz)
+        if time.monotonic() - self._guncelleme_kontrol > 30:
+            self._guncelleme_kontrol = time.monotonic()
+            self._guncelleme_var_guncelle()
         plan = self._plan(v) if self.gorunum == "pano" else None
         self._icerik_ciz(v, plan)
         if self.gorunum == "terminal":
@@ -229,7 +248,8 @@ class Pano:
                 self.terminal.ciz(zorla=True)
             self.kok.after(500, self.ciz)
         else:
-            self._mercek_ciz(v)
+            if self.gorunum == "pano":
+                self._mercek_ciz(v)
             self.kok.after(max(200, int(self.ayarlar.get("guncelleme_ms", 1000))), self.ciz)
 
     @staticmethod
@@ -242,15 +262,22 @@ class Pano:
     def _icerik_ciz(self, v, plan):
         c = self.cek
         # kaydırma sınırları
-        if plan:
+        if self.gorunum == "ayar":
+            self._ayar_plan = ayar_ekrani.yerlesim(
+                self.tasarim_g, self.tasarim_y, self.ayarlar, self.cikislar,
+                self._ayar_durumu())
+            self._max_kaydir = max(0.0, self._ayar_plan["icerik_y"] * self.S - self.h)
+        elif plan:
             self._max_kaydir = max(0.0, plan["icerik_y"] * self.S - self.h)
         else:
             self._max_kaydir = 0.0
         self.kaydir = max(0.0, min(self.kaydir, self._max_kaydir))
 
-        # kartlar (kaydırmalı)
+        # içerik (kaydırmalı)
         c.kaydir_ayarla(self.kaydir)
-        if plan:
+        if self.gorunum == "ayar":
+            ayar_ekrani.ciz(c, self._ayar_plan, self._ayar_durumu())
+        elif plan:
             for kid, (x, y, w, h) in plan["kartlar"].items():
                 # ekran dışında kalan kartı hiç çizme (kaydırmada hız kazancı)
                 if (y + h) * self.S - self.kaydir < 0 or y * self.S - self.kaydir > self.h:
@@ -278,6 +305,201 @@ class Pano:
         ust = (self.kaydir / self._max_kaydir) * (self.h - yuk)
         self.cek.dik_ekran(self.w - 7, ust, self.w - 3, ust + yuk, self.R["soluk"])
 
+    # ── ayar ekranı ──
+    def _bildir(self, metin):
+        self.bildiri = metin
+        self.bildiri_zaman = time.monotonic()
+
+    def _guncelleme_var_guncelle(self):
+        try:
+            from .. import guncelleme
+            self._guncelleme_var = guncelleme.yeni_surum_var()
+        except Exception:
+            self._guncelleme_var = False
+
+    def _ayar_durumu(self):
+        from .. import guncelleme
+        kart_bilgi = {ad: yerlesim.KART_BILGI[ad]["baslik"]
+                      for ad in sorted(yerlesim.KART_BILGI,
+                                       key=lambda k: yerlesim.KART_BILGI[k]["oncelik"],
+                                       reverse=True)}
+        self._guncelleme_var_guncelle()
+        return {"kart_bilgi": kart_bilgi,
+                "surum_metni": f"SysPano {guncelleme.yerel_surum()} · {guncelleme.metin_ozet()}"}
+
+    def _ayar_kutusu(self, kid):
+        if not self._ayar_plan:
+            return None
+        for k in self._ayar_plan["kutular"]:
+            if k.get("id") == kid:
+                return k
+        return None
+
+    def _ayar_isle(self, kid, eylem, deger):
+        if eylem in ("sec", "anahtar"):
+            self._ayar_uygula(kid, deger)
+        elif eylem == "kaydirici_adim":
+            kutu = self._ayar_kutusu(kid)
+            if kutu:
+                yeni = kutu["deger"] + deger * kutu["adim"] * 4
+                self._ayar_uygula(kid, max(kutu["alt"], min(kutu["ust"], round(yeni, 4))))
+        elif eylem == "kaydirici_basla":
+            self._ayar_uygula(kid, deger)
+        elif eylem == "dugme":
+            self._dugme_isle(kid)
+        self._son_imza = None
+        self.ciz()
+
+    def _dugme_isle(self, kid):
+        if kid == "kapat":
+            self.gorunum_degistir("pano")
+        elif kid == "olcek_oto":
+            self._ayar_uygula("olcek_oto", None)
+        elif kid == "guncelle_denetle":
+            self._bildir("Güncelleme denetleniyor…")
+            self._guncelleme_denetimi(zorla=True)
+        elif kid == "guncelle_uygula":
+            self._guncellemeyi_baslat()
+        elif kid == "yeniden_baslat":
+            self._yeniden_baslat()
+        elif kid == "sifirla":
+            self._ayarlari_sifirla()
+
+    def _ayar_uygula(self, kid, deger):
+        a = self.ayarlar
+        degisim = None
+        if kid == "tema":
+            a["tema"] = deger
+            self.R = tema.tema_sec(deger)
+            self.cek.renk = self.R
+            self.kok.configure(bg=self.R["arka"])
+            self.c.configure(bg=self.R["arka"])
+            degisim = {"tema": deger}
+        elif kid == "buyutec":
+            a["buyutec"] = {"auto": "auto", "acik": True, "kapali": False}.get(deger, "auto")
+            self.buyutec, self.buyutec_neden = self._buyutec_karar()
+            degisim = {"buyutec": a["buyutec"]}
+        elif kid == "aralik":
+            a["guncelleme_ms"] = int(deger)
+            self.t.aralik = max(0.25, int(deger) / 1000.0)
+            degisim = {"guncelleme_ms": int(deger)}
+        elif kid == "ekran":
+            a["ekran"] = deger
+            degisim = {"ekran": deger}
+            self._bildir("Hedef ekran kaydedildi — yeniden başlatınca uygulanır")
+        elif kid == "olcek":
+            a["olcek"] = round(float(deger), 3)
+            self._olcek_uygula()
+            degisim = {"olcek": a["olcek"]}
+        elif kid == "olcek_oto":
+            a["olcek"] = None
+            self._olcek_uygula()
+            degisim = {"olcek": None}
+            self._bildir("Ölçek: ekran DPI'ına göre otomatik")
+        elif kid == "terminal":
+            a["terminal"] = bool(deger)
+            degisim = {"terminal": bool(deger)}
+        elif kid == "tepsi":
+            a["tepsi"] = bool(deger)
+            degisim = {"tepsi": bool(deger)}
+            self._bildir("Tepsi ayarı — yeniden başlatınca uygulanır")
+        elif kid == "otomatik_kart":
+            a["otomatik_kart"] = bool(deger)
+            degisim = {"otomatik_kart": bool(deger)}
+        elif kid and kid.startswith("kart:"):
+            ad = kid.split(":", 1)[1]
+            secili = set(a.get("kartlar") or list(yerlesim.KART_BILGI))
+            if deger:
+                secili.add(ad)
+            else:
+                secili.discard(ad)
+            if not secili:
+                secili = {"cpu"}
+            a["kartlar"] = [k for k in yerlesim.KART_BILGI if k in secili]
+            degisim = {"kartlar": a["kartlar"]}
+        if degisim:
+            try:
+                ayar_modul.guncelle(degisim)
+            except Exception:
+                pass
+        self._son_imza = None
+
+    def _olcek_uygula(self):
+        """Ölçek değiştiğinde tasarım uzayını ve bağımlı değerleri tazeler."""
+        self.S = self._olcek_hesapla()
+        self.tasarim_g = max(320, int(round(self.w / self.S)))
+        self.tasarim_y = max(240, int(round(self.h / self.S)))
+        self.cek.S = self.S
+        self.cek.ekran_g, self.cek.ekran_y = self.w, self.h
+        self.buyutec, self.buyutec_neden = self._buyutec_karar()
+        self._son_imza = None
+        self._ayar_plan = None
+
+    def _guncelleme_denetimi(self, zorla=False):
+        """Yeni sürüm var mı? Ağa çıkan iş ayrı bir süreçte yapılır."""
+        if self._kapali:
+            return
+        try:
+            from .. import guncelleme
+            if not zorla and not guncelleme.denetim_bayati(24):
+                self._guncelleme_var_guncelle()
+                return
+            subprocess.Popen([sys.executable, "-m", "syspano", "--guncelle-denetle"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except Exception:
+            pass
+        self.kok.after(8000, self._guncelleme_var_guncelle)
+
+    def _guncellemeyi_baslat(self):
+        from .. import guncelleme
+        if not guncelleme.kayit_oku():
+            self._bildir("Kurulum kaydı yok — ./install.sh ile kurun")
+            return
+        try:
+            yol = os.path.join(guncelleme.durum_dizini(), "guncelleme.log")
+            with open(yol, "a") as kayit:
+                kayit.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} güncelleme ===\n")
+                kayit.flush()
+                subprocess.Popen([sys.executable, "-m", "syspano", "--guncelle"],
+                                 stdout=kayit, stderr=kayit, start_new_session=True)
+            self._bildir("Güncelleme arka planda başladı — bitince yeniden başlatın")
+        except Exception as hata:
+            self._bildir(f"Güncelleme başlatılamadı: {hata}")
+
+    def _yeniden_baslat(self):
+        self._bildir("Yeniden başlatılıyor…")
+        self._kapali = True
+        try:
+            if self.terminal:
+                self.terminal.kapat()
+        except Exception:
+            pass
+        try:
+            os.execv(sys.executable,
+                     [sys.executable, "-m", "syspano", *self._baslangic_argv])
+        except Exception as hata:
+            self._kapali = False
+            self._bildir(f"Yeniden başlatılamadı: {hata}")
+
+    def _ayarlari_sifirla(self):
+        from .. import guncelleme  # noqa: F401  (paket içe aktarımı sırası için)
+        try:
+            os.remove(ayar_modul.yol())
+        except Exception:
+            pass
+        self.ayarlar.clear()
+        self.ayarlar.update(ayar_modul.oku())
+        self.R = tema.tema_sec(self.ayarlar.get("tema", "koyu"))
+        self.cek.renk = self.R
+        self.kok.configure(bg=self.R["arka"])
+        self.c.configure(bg=self.R["arka"])
+        self.t.aralik = max(0.25, self.ayarlar.get("guncelleme_ms", 1000) / 1000.0)
+        self._olcek_uygula()
+        self.terminal_yazi = self._terminal_varsayilan()
+        self.kaydir = 0.0
+        self._bildir("Ayarlar varsayılana döndü")
+
     def _metin_gen(self, metin, boyut, kalin=False):
         """Metnin tasarım birimi cinsinden genişliği (üst şerit kaydırmasız)."""
         try:
@@ -293,7 +515,8 @@ class Pano:
         c.dik(0, 46, TG, 46.8, R["kenar"])
         s = v.get("sistem") or {}
         up = int(s.get("uptime_sn", 0))
-        baslik = "▣  SYSPANO" if self.gorunum == "pano" else "▶  TERMINAL"
+        baslik = {"pano": "▣  SYSPANO", "terminal": "▶  TERMINAL",
+                  "ayar": "⚙  AYARLAR"}.get(self.gorunum, "▣  SYSPANO")
         c.yazi(18, 23, baslik, 12, R["mavi"], True)
 
         # orta bilgi: düğmelere çarpmayacak en uzun sürüm seçilir
@@ -313,11 +536,17 @@ class Pano:
         for ad, (dx, dy, dw, dh) in dugmeler.items():
             secili = (ad == self.gorunum)
             c.dik(dx, dy, dx + dw, dy + dh, R["mavi"] if secili else R["dugme"], R["kenar"])
-            etiket = {"pano": "▤ Pano", "terminal": "⌨ Terminal", "kapat": "✕"}[ad]
+            etiket = {"pano": "▤ Pano", "terminal": "⌨ Terminal",
+                      "ayar": "⚙ Ayarlar", "kapat": "✕"}[ad]
             if dw < 74:
-                etiket = {"pano": "▤", "terminal": "⌨", "kapat": "✕"}[ad]
+                etiket = {"pano": "▤", "terminal": "⌨", "ayar": "⚙", "kapat": "✕"}[ad]
             c.yazi(dx + dw / 2, dy + dh / 2 + 1, etiket, 11,
                    R["arka"] if secili else R["yazi"], secili, "center")
+            # güncelleme varsa ⚙ üzerinde küçük bir uyarı noktası
+            if ad == "ayar" and self._guncelleme_var:
+                r = 4.0
+                c.c.create_oval(dx + dw - r - 3, dy + 3, dx + dw + r - 3, dy + 3 + 2 * r,
+                                fill=R["sari"], outline=R["ustluk"])
 
     def _bildiri_ciz(self):
         if not (self.bildiri and time.monotonic() - self.bildiri_zaman < 2.5):
@@ -439,8 +668,23 @@ class Pano:
         # Dokunma/tıklama büyüteci getirmesin: yeniden gerçek hareket gereksin
         self._gercek_hareket = False
         self._mercek_gizle()
+        self._kaydirici = None
+        # ayar ekranında kaydırıcıya basıldıysa sürükleme onu ayarlar
+        if self.gorunum == "ayar" and self._ayar_plan:
+            dx, dy = olay.x / self.S, (olay.y + self.kaydir) / self.S
+            isaret = ayar_ekrani.isabet(self._ayar_plan, dx, dy)
+            if isaret and isaret[1] == "kaydirici_basla":
+                self._kaydirici = isaret[0]
 
     def _surukle(self, olay):
+        # kaydırıcı sürüklemesi (dokunmatikte çubuğu parmakla kaydırma)
+        if self._kaydirici is not None:
+            kutu = self._ayar_kutusu(self._kaydirici)
+            if kutu:
+                self._ayar_uygula(self._kaydirici,
+                                  ayar_ekrani._kaydirici_deger(kutu, olay.x / self.S))
+                self.ciz()
+            return
         if self._tiklama is None or self._max_kaydir <= 0:
             return
         self.kaydir = max(0.0, min(self._max_kaydir,
@@ -453,9 +697,12 @@ class Pano:
             return
         bx, by, _ = self._tiklama
         self._tiklama = None
+        kaydirici_vardi = self._kaydirici is not None
+        self._kaydirici = None
         if abs(olay.x - bx) + abs(olay.y - by) > 8:
-            return
-        dx, dy = olay.x / self.S, olay.y / self.S      # üst şerit kaydırmasız
+            return                       # sürükleme sayıldı
+        # düğmeler üst şeritte ve kaydırmadan etkilenmez
+        dx, dy = olay.x / self.S, olay.y / self.S
         for ad, (qx, qy, qw, qh) in self._dugmeler(self.tasarim_g).items():
             if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
                 if ad == "kapat":
@@ -463,6 +710,14 @@ class Pano:
                 else:
                     self.gorunum_degistir(ad)
                 return
+        if self.gorunum == "ayar":
+            if kaydirici_vardi:
+                return                   # kaydırıcıya dokunuldu, değer zaten ayarlandı
+            dx, dy = olay.x / self.S, (olay.y + self.kaydir) / self.S
+            isaret = ayar_ekrani.isabet(self._ayar_plan, dx, dy)
+            if isaret:
+                self._ayar_isle(*isaret)
+            return
         if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
             self.terminal_baslat()
             self.kok.focus_force()
@@ -483,6 +738,9 @@ class Pano:
         self.ciz()
 
     def _tus(self, olay):
+        if olay.keysym == "Escape" and self.gorunum == "ayar":
+            self.gorunum_degistir("pano")
+            return "break"
         if olay.state & 0x4:
             k = olay.keysym
             if k in ("plus", "equal", "KP_Add"):
@@ -504,7 +762,12 @@ class Pano:
             self.bildiri = "terminal kapalı (yapılandırma)"
             self.bildiri_zaman = time.monotonic()
             return
+        if yeni not in ("pano", "terminal", "ayar"):
+            return
         self.gorunum = yeni
+        if yeni == "ayar":
+            self.kaydir = 0.0
+            self._ayar_plan = None
         if yeni == "terminal":
             if self.terminal is None:
                 self.terminal_baslat()
