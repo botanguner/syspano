@@ -45,10 +45,11 @@ ICERIK = "icerik"           # kaydırmada `canvas.move` ile taşınan bölüm
 
 
 class Pano:
-    def __init__(self, ayarlar, cikis=None, mod="ekran", cikislar=None):
+    def __init__(self, ayarlar, cikis=None, mod="ekran", cikislar=None, demo=False):
         self.ayarlar = ayarlar
         self.cikis = cikis
         self.mod = mod
+        self.demo = demo
         self.cikislar = list(cikislar or ([cikis] if cikis else []))
         self.sinif = "syspano"
         self._baslangic_argv = list(sys.argv[1:])   # yeniden başlatmada aynı seçenekler
@@ -94,7 +95,11 @@ class Pano:
         self._guncelleme_kontrol = 0.0
         self.bildiri = ""
         self.bildiri_zaman = 0.0
-        self.t = Toplayici(ayarlar)
+        if demo:
+            from ..demo import DemoToplayici      # uydurma veri, sistem okunmaz
+            self.t = DemoToplayici(ayarlar)
+        else:
+            self.t = Toplayici(ayarlar)
         self.gecmis = {k: deque(maxlen=GECMIS_UZUNLUK) for k in
                        ("cpu", "bellek", "sicaklik", "pil", "gpu", "dgpu",
                         "ag_in", "ag_out")}
@@ -162,7 +167,7 @@ class Pano:
         self.kok.after(2000, self._durum_yaz)
         self.kok.after(600, self._mercek_denetle)
         # güncelleme denetimi: önbellek eskimişse arka planda bir kez
-        if ayarlar.get("guncelleme_denetimi", True):
+        if ayarlar.get("guncelleme_denetimi", True) and not demo:
             self.kok.after(9000, self._guncelleme_denetimi)
         if ayarlar.get("test_suresi"):
             self.kok.after(int(ayarlar["test_suresi"]) * 1000, self.kapat)
@@ -630,9 +635,10 @@ class Pano:
         c.yazi(14, self.tasarim_y - 6, "  ·  ".join(parcalar), 10, R["cok_soluk"],
                False, "sw")
         # sağdaki uzun metin yalnızca yer varsa (çakışmasın)
+        cekirdek = (v.get("sistem") or {}).get("cekirdek") or os.uname().release
         if self.tasarim_g > 1000:
             c.yazi(self.tasarim_g - 14, self.tasarim_y - 6,
-                   f"{os.uname().release[:20]}  ·  SysPano", 10, R["cok_soluk"], False, "se")
+                   f"{cekirdek[:20]}  ·  SysPano", 10, R["cok_soluk"], False, "se")
         elif self.tasarim_g > 620:
             c.yazi(self.tasarim_g - 14, self.tasarim_y - 6, "SysPano", 10,
                    R["cok_soluk"], False, "se")

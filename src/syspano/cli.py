@@ -67,6 +67,9 @@ def _olustur_ayristirici():
     p.add_argument("--aralik", type=int, metavar="MS", help="güncelleme aralığı (ms)")
     p.add_argument("--ayarlar", action="store_true",
                    help="pano yerine ayar ekranıyla başla")
+    p.add_argument("--demo", action="store_true",
+                   help="uydurma verilerle çalıştır (ekran görüntüsü/demo için; "
+                        "hiçbir sistem dosyası okunmaz)")
     p.add_argument("--test", nargs="?", const=10, type=int, metavar="SANIYE",
                    help="test modu: belirtilen süre sonra kapanır (varsayılan 10 sn)")
     p.add_argument("--liste-ekranlar", action="store_true",
@@ -269,9 +272,10 @@ def main(argv=None):
         mod = "pencere"
 
     from .arayuz.pano import Pano
-    pano = Pano(ayarlar, cikis=cikis, mod=mod, cikislar=cikislar)
+    pano = Pano(ayarlar, cikis=cikis, mod=mod, cikislar=cikislar, demo=args.demo)
 
-    print(f"SysPano {__version__}\n"
+    print(f"SysPano {__version__}"
+          + ("  [DEMO — uydurma veriler]\n" if args.demo else "\n") +
           f"  ekran   : {cikis.ad if cikis else 'tüm ekran'} "
           f"({pano.w}x{pano.h}+{pano.x}+{pano.y})\n"
           f"  ölçek   : {pano.S:.2f}  → tasarım {pano.tasarim_g}x{pano.tasarim_y}\n"

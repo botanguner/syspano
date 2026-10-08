@@ -3,6 +3,29 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.2.1] — 2026-10-08
+
+### Düzeltildi
+- **Depodaki ekran görüntüsünde kişisel ve makine bilgileri görünüyordu:**
+  ana makine adı, yerel IP (`192.168.1.82`), disk modeli
+  (`SAMSUNG MZVLB1T0HALR-00000`), dizüstü modeli ve gerçek çekirdek sürümü.
+  Görüntü artık `syspano --demo` ile alınmış, yalnızca uydurma veri içeren bir
+  kare; PNG meta verisi de sıyrıldı.
+- `tests/test_kartlar.py`: örnek veride gerçek disk modeli ve yerel IP vardı;
+  yerine "Örnek SSD 512 GB" ve belgeleme için ayrılmış adres (`192.0.2.10`,
+  RFC 5737) konuldu.
+- Alt bilgi, çekirdek sürümünü `os.uname()` yerine toplanan veriden okuyor —
+  demo modunda gerçek sürüm görünmesin.
+
+### Eklendi
+- **`--demo` modu** (`src/syspano/demo.py`): hiçbir sistem dosyası okumaz,
+  değerler zamanla dalgalanır. Ekran görüntüsü almak, arayüz geliştirmek ve
+  donanımı olmadan denemek için. Pano, arka uç olarak onu gerçek toplayıcıyla
+  aynı arayüzle kullanır (`al`, `dongu`, `aralik`).
+- `tests/test_demo.py`: demo verisinin bu makineden iz taşımadığını (makine
+  adı, kullanıcı adı, ev dizini, çekirdek sürümü, gerçek ağ öneki) ve
+  kartların beklediği şekle uyduğunu denetler. **11 dosyada 81 test.**
+
 ## [1.2.0] — 2026-10-08
 
 ### Değişti — kaynak kullanımı yarıdan fazla azaldı

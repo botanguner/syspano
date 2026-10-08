@@ -11,6 +11,9 @@ Raspberry Pi OS üzerinde çalışır.
 
 ![SysPano ekran görüntüsü](docs/ekran-goruntusu.png)
 
+<sub>Ekran görüntüsü `syspano --demo` ile alındı: tüm değerler uydurmadır
+(makine adı, IP, disk modeli, süreç adları).</sub>
+
 > **Belgeler:** ayrıntılı kurulum, kullanım, ayarlar ve sorun giderme için
 > **[wiki'ye](https://github.com/botanguner/syspano/wiki)** bakın.
 
@@ -135,6 +138,7 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--liste-ekranlar` | Bağlı ekranları listele ve çık |
 | `--kartlari-listele` | Kullanılabilir kartları listele ve çık |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
+| `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
 | `--guncelle-denetle` | Yeni sürüm var mı denetle (ağa çıkar) |
 | `--kurulum-bilgisi` | Kurulum kaydını ve durum dosyalarını göster |
@@ -475,6 +479,7 @@ Toplam **10 dosyada 79 test**. Ayrıca kaynak profili için: `python3 arac/olcum
 ```bash
 ./run.sh --pencere 1400x900 --olcek 0.94     # 4 sütunlu tam pano
 ./run.sh --pencere 620x380 --olcek 0.7       # küçük ekran taklidi
+./run.sh --demo --pencere 1500x900           # uydurma verilerle (ekran görüntüsü için)
 ```
 
 ## Performans
