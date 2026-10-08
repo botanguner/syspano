@@ -562,6 +562,43 @@ def loglar(ck, x, y, w, h, v, g):
                 ck.renk["cok_soluk"])
 
 
+# ─── Pi sağlığı (throttle / düşük voltaj) ────────────────────────────────────
+def pisaglik(ck, x, y, w, h, v, g):
+    d = v.get("pisaglik") or {}
+    _baslik(ck, x, y, w, h, "Pİ SAĞLIĞI")
+    if d.get("yok"):
+        return _yok(ck, x, y, w, h, "vcgencmd yok")
+    alt = y + h - 8
+    yy = y + 40
+
+    if d.get("simdi_var"):
+        ana = "⚠ " + ", ".join(e for _a, e in d["simdi"]).upper()
+        renk = ck.renk["kirmizi"]
+    elif d.get("gecmis_var"):
+        ana, renk = "✓ Şu an normal", ck.renk["yesil"]
+    else:
+        ana, renk = "✓ Normal", ck.renk["yesil"]
+    if yy <= alt:
+        ck.yazi(x + 16, yy, _kirp(ck, ana, 15, w - 32), 15, renk, True)
+        yy += 24
+
+    ayrinti = []
+    if d.get("gerilim"):
+        ayrinti.append(f"{d['gerilim']:.2f} V")
+    if d.get("ghz"):
+        ayrinti.append(f"{d['ghz']:.2f} GHz")
+    if d.get("ham"):
+        ayrinti.append(d["ham"])
+    if ayrinti and yy + 14 <= alt:
+        ck.yazi(x + 16, yy, " · ".join(ayrinti), 10.5, ck.renk["soluk"])
+        yy += 18
+
+    if d.get("gecmis_var") and yy + 14 <= alt:
+        gecmis = ", ".join(e for _a, e in d["gecmis"])
+        ck.yazi(x + 16, yy, _kirp(ck, f"geçmişte: {gecmis}", 10.5, w - 32),
+                10.5, ck.renk["sari"])
+
+
 # ─── sistem ──────────────────────────────────────────────────────────────────
 def sistem(ck, x, y, w, h, v, g):
     d = v.get("sistem") or {}
@@ -590,5 +627,5 @@ CIZIM = {
     "cpu": cpu, "bellek": bellek, "sicaklik": sicaklik, "pil": pil,
     "cekirdek": cekirdek, "gecmis": gecmis, "gpu": gpu, "disk_ag": disk_ag,
     "surecler": surecler, "servisler": servisler, "loglar": loglar,
-    "yedek": yedek, "sistem": sistem,
+    "pisaglik": pisaglik, "yedek": yedek, "sistem": sistem,
 }

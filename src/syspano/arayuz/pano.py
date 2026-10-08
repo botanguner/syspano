@@ -242,6 +242,8 @@ class Pano:
                 continue
             if k == "loglar" and (v.get("loglar") or {}).get("yok"):
                 continue
+            if k == "pisaglik" and (v.get("pisaglik") or {}).get("yok"):
+                continue
             if k == "sicaklik" and not (v.get("sicaklik") or {}).get("sensor_var"):
                 continue
             hazir.append(k)
@@ -1244,6 +1246,12 @@ class Pano:
         elif komut == "gorunum_degistir":
             self.goster()
             self.gorunum_degistir("terminal" if self.gorunum == "pano" else "pano")
+        elif komut == "cek":
+            from .. import goruntu
+            ok, mesaj = goruntu.cek()
+            self._bildir(("Ekran görüntüsü: " if ok else "Ekran görüntüsü alınamadı: ")
+                         + mesaj, 8)
+            self.ciz()
         elif komut == "yazi:+":
             self._yazi_degistir(2)
         elif komut == "yazi:-":
