@@ -1,0 +1,16 @@
+[Unit]
+Description=SysPano sistem ve kaynak izleme panosu
+Documentation=https://github.com/kullanici/syspano
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# ExecStart yolu kurulumunuza göre düzeltin (which syspano).
+ExecStart=%h/.local/bin/syspano
+Restart=on-failure
+RestartSec=5
+# Gömülü terminal çalışmasın isteniyorsa: ExecStart=... --terminal-yok
+
+[Install]
+WantedBy=graphical-session.target

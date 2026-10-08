@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python }} · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.9", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Derleme denetimi
+        run: python -m compileall -q src
+
+      - name: Testler (Tk gerekmez)
+        run: ./tests/run.sh
+
+      - name: Paket kurulabiliyor mu?
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet .
+          syspano --surum
+          syspano --kartlari-listele
+
+  kabuk:
+    name: Kabuk betikleri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: |
+          bash -n install.sh
+          bash -n run.sh
+          bash -n tests/run.sh
