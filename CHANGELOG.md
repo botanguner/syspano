@@ -3,6 +3,19 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.7.1] — 2026-10-08
+
+### Düzeltildi
+- **`--kart-ekle` / `--kart-cikar` kalıcı değildi.** Seçenekler kart listesini
+  yalnızca bellekte değiştiriyor, yapılandırmaya yazmıyordu — komut başarılı
+  görünüyor ama pano bir sonraki açılışta yine eski listeyi gösteriyordu
+  (Raspberry Pi'de yeni kartı açmaya çalışırken görüldü). Artık ikisi de
+  `config.json`'a yazar ve `Kart listesi kaydedildi: …` diye bildirir.
+  `--kartlar` bilinçli olarak **kalıcı değil**: yalnızca o çalıştırma için
+  geçerlidir (README'de açıkça yazıyor).
+- 3 yeni test (toplam **17 dosyada 158 test**): kart listesi ekleme/çıkarma ve
+  yerleşim sırası, yapılandırmaya yazma, `--kartlar`'ın kalıcı olmaması.
+
 ## [1.7.0] — 2026-10-08
 
 ### Eklendi
