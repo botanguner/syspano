@@ -3,6 +3,28 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.6.0] — 2026-10-08
+
+### Değişti
+- **Günlük hata/uyarı sayımı artık zaman penceresine göre (journald).**
+  "Son 200 satır" ölçütü yanıltıcıydı: sakin bir günlükte aylar önceki açılış
+  hataları hâlâ o pencerede kalıp **"8 hata"** gösteriyordu — Raspberry Pi'de
+  MariaDB'de tam olarak bu görüldü (düzeltmeden sonra da kart "8 hata" diyordu;
+  oysa yeni açılışta hiç hata yoktu). Artık journald kaynaklarında sayım
+  **son 60 dakikaya** göre yapılır; dosya kaynaklarında zaman damgası garantisi
+  olmadığı için son satırlar kullanılmaya devam eder.
+  - Yeni ayar: `log_pencere_dk` (varsayılan 60).
+  - Yeni seçenek: `--log-pencere DK` (ör. `syspano --log mariadb --log-pencere 15`).
+  - Görüntüleyici başlığı journal kaynaklarında pencereyi yazar:
+    `journalctl · son 60 dk: 0 hata · 0 uyarı · mariadb.service`.
+  - `--log-kaynaklar` çıktısında journal satırlarının sayımı da bu pencereye göre.
+
+### Eklendi
+- `loglar.ozet_journal(birim, dakika)`: `journalctl --since -Ndk -o cat` ile
+  penceredeki hata/uyarı sayımı (çekirdek günlüğü için `-k`).
+- 3 yeni test (toplam **14 dosyada 141 test**): pencere sayımı ve `--since`
+  argümanı, çekirdek/varsayılan pencere, okunamayan journal'da güvenli sıfır.
+
 ## [1.5.0] — 2026-10-08
 
 ### Eklendi

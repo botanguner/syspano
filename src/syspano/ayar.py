@@ -41,6 +41,8 @@ VARSAYILAN = {
     "servis_log_dosyalari": {},
     # geliştirici günlükleri: ek dosya ya da desen (ör. "~/proje/storage/logs/*.log")
     "log_dosyalari": [],
+    # journald kaynaklarında hata/uyarı sayımı için zaman penceresi (dakika)
+    "log_pencere_dk": 60,
     "servis_aralik": 30,        # saniye; servis durumu bu aralıkta okunur (düşürülebilir)
     "servis_log_satir": 200,    # günlük görüntüleyicide gösterilecek satır
     "uygulama_basligi": "SysPano",

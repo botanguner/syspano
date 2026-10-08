@@ -105,6 +105,7 @@ UYARI_KELIMELERI = ("warn", "notice", "deprecated", "uyarı")
 KESIF_OMRU = 600.0      # saniye; kaynak listesi bu sürede bir tazelenir
 STAT_ARALIK = 5.0       # saniye; boyut/yaş tazeleme aralığı
 AZAMI_BAYT = 512 * 1024  # kuyruk okumasında en fazla bu kadar bayt okunur
+VARSAYILAN_PENCERE_DK = 60   # journald hata/uyarı sayımı için zaman penceresi
 
 
 def _ozel_etiket(desen):
@@ -305,6 +306,29 @@ def ozet(metin):
         elif tur == "uyari":
             uyari += 1
     return {"hata": hata, "uyari": uyari}
+
+
+def ozet_journal(birim, dakika=None, satir=2000):
+    """journald kaynağında **son `dakika` dakikanın** hata/uyarı sayısı.
+
+    Son 200 satıra bakmak yanıltıcı olabiliyordu: sakin bir günlükte aylar önceki
+    açılış hataları hâlâ o pencerede kalıp "8 hata" gösteriyordu (Raspberry Pi'de
+    MariaDB'de görüldü). Bu yüzden journal kaynaklarında sayım zaman penceresine
+    göre yapılır; dosya kaynaklarında zaman damgası garantisi olmadığı için
+    kuyruk (son satırlar) kullanılmaya devam eder.
+    """
+    from . import servisler as S
+    dakika = int(dakika if dakika is not None else VARSAYILAN_PENCERE_DK)
+    hedef = (["-k"] if str(birim) == CEKIRDEK_BIRIMI else ["-u", str(birim)])
+    kod, cikti = S._calistir(["journalctl", *hedef, "--since", f"-{max(1, dakika)}min",
+                              "-n", str(satir), "--no-pager", "-o", "cat"], 10)
+    if kod != 0:
+        return {"hata": 0, "uyari": 0, "satir": 0, "pencere_dk": dakika,
+                "hata_mesaji": "okunamadı"}
+    satirlar = (cikti or "").splitlines()
+    o = ozet("\n".join(satirlar))
+    return {"hata": o["hata"], "uyari": o["uyari"], "satir": len(satirlar),
+            "pencere_dk": dakika}
 
 
 def suz(metin, yalniz_hata=False):

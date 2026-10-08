@@ -87,6 +87,8 @@ def _olustur_ayristirici():
                    help="bir günlük dosyasının sonunu yazdır (--log-satir ile satır sayısı)")
     p.add_argument("--log-hata", action="store_true",
                    help="--log/--log-dosya çıktısında yalnızca hata ve uyarı satırları")
+    p.add_argument("--log-pencere", type=int, default=None, metavar="DK",
+                   help="journald hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk)")
     p.add_argument("--log-satir", type=int, default=200, metavar="N",
                    help="--log ile gösterilecek satır sayısı (varsayılan 200)")
     p.add_argument("--guncelle", action="store_true",
@@ -225,7 +227,7 @@ def _servisleri_listele():
     return 0
 
 
-def _log_yazdir(birim, satir, yalniz_hata=False):
+def _log_yazdir(birim, satir, yalniz_hata=False, pencere=None):
     from .cihaz import loglar as L
     from .cihaz import servisler as S
     if not S.systemd_var():
@@ -233,9 +235,12 @@ def _log_yazdir(birim, satir, yalniz_hata=False):
         return 1
     ad = _birim_adi(birim)
     ayar = ayar_modul.oku()
+    pencere = int(pencere if pencere is not None else
+                  ayar.get("log_pencere_dk") or L.VARSAYILAN_PENCERE_DK)
     metin, kaynak = S.gunluk(ad, max(1, satir), ayar)
-    ozet = L.ozet(metin)
-    print(f"# {ad} · kaynak: {kaynak} · {ozet['hata']} hata · {ozet['uyari']} uyarı")
+    p = L.ozet_journal(ad, pencere)
+    print(f"# {ad} · kaynak: {kaynak} · son {pencere} dk: {p['hata']} hata · "
+          f"{p['uyari']} uyarı · (gösterilen {min(satir, len(metin.splitlines()))} satır)")
     print(L.suz(metin, yalniz_hata))
     return 0
 
@@ -250,14 +255,17 @@ def _log_dosya_yazdir(yol, satir, yalniz_hata=False):
     return 0
 
 
-def _log_kaynaklari_listele(satir=200):
-    """Bulunan günlük dosyalarını, son satırlarındaki hata/uyarı sayısıyla listeler."""
+def _log_kaynaklari_listele(satir=200, pencere=None):
+    """Bulunan günlük kaynaklarını, **son `pencere` dakikadaki** hata/uyarı sayısıyla
+    listeler (journal kaynakları); dosya kaynaklarında son satırlara bakılır."""
     import time
 
     from .cihaz import loglar as L
     from .cihaz.ortak import kuyruk
 
     ayar = ayar_modul.oku()
+    pencere = int(pencere if pencere is not None else
+                  ayar.get("log_pencere_dk") or L.VARSAYILAN_PENCERE_DK)
     kaynaklar = L.bul(L.desenler(ayar), ayar=ayar)
     if not kaynaklar:
         print("günlük kaynağı bulunamadı.")
@@ -265,12 +273,14 @@ def _log_kaynaklari_listele(satir=200):
         print('  "log_dosyalari": ["~/projelerim/*/storage/logs/*.log", "journal:benim-servisim"]')
         return 0
 
-    print(f"{'günlük':<22} {'son yazılma':<12} {'boyut':>8} {'hata':>5} {'uyarı':>6}  yol / birim")
+    print(f"{'günlük':<22} {'son yazılma':<12} {'boyut':>8} "
+          f"{'hata':>5} {'uyarı':>6}  yol / birim")
+    print(f"{'':<22} {'':<12} {'':>8} {'(son ' + str(pencere) + ' dk)':>5}")
     print("-" * 100)
     simdi = time.time()
     for k in kaynaklar:
         if k.get("tur") == "journal":
-            ozet = L.ozet(L.gunluk_journal(k["birim"], max(1, satir))[0])
+            ozet = L.ozet_journal(k["birim"], pencere)
             print(f"{k['etiket']:<22} {'journal':<12} {'—':>8} "
                   f"{ozet['hata']:>5} {ozet['uyari']:>6}  {k['birim']}")
             continue
@@ -317,13 +327,13 @@ def main(argv=None):
         return _servisleri_listele()
 
     if args.log_kaynaklar:
-        return _log_kaynaklari_listele(args.log_satir)
+        return _log_kaynaklari_listele(args.log_satir, args.log_pencere)
 
     if args.log_dosya:
         return _log_dosya_yazdir(args.log_dosya, args.log_satir, args.log_hata)
 
     if args.log:
-        return _log_yazdir(args.log, args.log_satir, args.log_hata)
+        return _log_yazdir(args.log, args.log_satir, args.log_hata, args.log_pencere)
 
     if args.liste_ekranlar:
         print(ekran_modul.liste_metni())
