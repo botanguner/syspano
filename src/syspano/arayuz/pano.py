@@ -82,6 +82,8 @@ class Pano:
         self.mercek = None
         self.mercek_yer = None
         self.mercek_zaman = 0.0
+        self._fare_son = None            # son görülen imleç yeri (ekran pikseli)
+        self._gercek_hareket = False     # pencere açıldığından beri gerçekten oynadı mı
 
         # tepsi iletişimi
         calisma = ortam.emin_ol(ortam.durum_dizini())
@@ -100,6 +102,7 @@ class Pano:
         self.c.pack(fill="both", expand=True)
         self.cek = Cekim(self.c, self.S, self.R, tema.yazi_ailesi(self.kok))
         self.cek.ekran_g, self.cek.ekran_y = self.w, self.h
+        self.buyutec, self.buyutec_neden = self._buyutec_karar()
 
         self.yer = Yerlestirici(self.kok, self.sinif, self.x, self.y, self.w, self.h,
                                 kwin_koord=self.kwin_koord,
@@ -346,8 +349,32 @@ class Pano:
                    R["cok_soluk"], False, "se")
 
     # ── büyüteç ──
+    def _buyutec_karar(self):
+        """Büyüteç açık mı? (durum, gerekçe) döndürür.
+
+        `auto`: yalnızca fare/dokunmatik yüzey varsa ve ekran yeterince genişse
+        açılır. Dokunmatik panelde büyüteç belirip kaybolmadığı için ekranı
+        kalıcı olarak kapatıyordu; orada kendiliğinden kapalıdır.
+        """
+        secim = self.ayarlar.get("buyutec", "auto")
+        if secim is True:
+            return True, "elle açık"
+        if secim is False:
+            return False, "elle kapalı"
+        if not ortam.goreli_isaretci_var():
+            return False, "fare yok (dokunmatik ekran)"
+        if self.tasarim_g < 640 or self.tasarim_y < 320:
+            return False, "ekran küçük"
+        return True, "fare var"
+
     def _fare(self, olay):
         yeni = (olay.x, olay.y)
+        # Pencere imlecin altında açıldığında kendiliğinden bir hareket olayı
+        # gelir; büyütecin belirmesi için imleç gerçekten oynamalı.
+        if self._fare_son is not None and (
+                abs(yeni[0] - self._fare_son[0]) + abs(yeni[1] - self._fare_son[1]) >= 3):
+            self._gercek_hareket = True
+        self._fare_son = yeni
         if self.mercek is not None and (
                 abs(yeni[0] - self.mercek[0]) + abs(yeni[1] - self.mercek[1]) > MERCEK_TOLERANS):
             self._mercek_gizle()
@@ -356,6 +383,8 @@ class Pano:
 
     def _fare_cikti(self, _olay=None):
         self.mercek_yer = None
+        self._fare_son = None
+        self._gercek_hareket = False
         self._mercek_gizle()
 
     def _mercek_gizle(self):
@@ -367,7 +396,7 @@ class Pano:
         if self._kapali:
             return
         yer = self.mercek_yer
-        uygun = (self.ayarlar.get("buyutec", True) and self.gorunum == "pano"
+        uygun = (self.buyutec and self._gercek_hareket and self.gorunum == "pano"
                  and yer is not None and yer[1] >= self.cek.s(MERCEK_UST_SINIR)
                  and time.monotonic() - self.mercek_zaman >= MERCEK_BEKLEME)
         if uygun:
@@ -407,6 +436,9 @@ class Pano:
     # ── fare / tıklama / kaydırma ──
     def _basildi(self, olay):
         self._tiklama = (olay.x, olay.y, self.kaydir)
+        # Dokunma/tıklama büyüteci getirmesin: yeniden gerçek hareket gereksin
+        self._gercek_hareket = False
+        self._mercek_gizle()
 
     def _surukle(self, olay):
         if self._tiklama is None or self._max_kaydir <= 0:
@@ -505,7 +537,8 @@ class Pano:
             self.terminal_yazi = sonuc
             self.ayarlar["terminal_yazi"] = sonuc
             try:
-                ayar_modul.yaz(self.ayarlar)
+                # yalnızca değişen anahtar yazılır; varsayılanlar dosyaya düşmez
+                ayar_modul.guncelle({"terminal_yazi": sonuc})
             except Exception:
                 pass
             self.bildiri = f"terminal yazı boyutu: {sonuc} px"
@@ -519,7 +552,7 @@ class Pano:
             self.terminal_yazi = self._terminal_varsayilan()
             self.terminal.yazi_boyut_degistir(self.terminal_yazi)
             try:
-                ayar_modul.yaz(self.ayarlar)
+                ayar_modul.guncelle(sil=("terminal_yazi",))
             except Exception:
                 pass
             self.bildiri = f"terminal yazı boyutu: {self.terminal_yazi} px"

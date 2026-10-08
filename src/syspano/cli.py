@@ -189,6 +189,7 @@ def main(argv=None):
           f"  ekran   : {cikis.ad if cikis else 'tüm ekran'} "
           f"({pano.w}x{pano.h}+{pano.x}+{pano.y})\n"
           f"  ölçek   : {pano.S:.2f}  → tasarım {pano.tasarim_g}x{pano.tasarim_y}\n"
+          f"  büyüteç : {'açık' if pano.buyutec else 'kapalı'} ({pano.buyutec_neden})\n"
           f"  masaüstü: {ortam.masaustu() or '?'} / {ortam.oturum_tipi()} / "
           f"{ortam.dagitim()}", flush=True)
 

@@ -3,6 +3,39 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.0.1] — 2026-10-08
+
+### Eklendi
+- `tests/test_ortam.py`: `/proc/bus/input/devices` ayrıştırma (fare, dokunmatik
+  panel, klavye, tek eksenli ve bozuk maskeler) ve büyüteç kararının sınanması.
+- `tests/test_ayar.py`: yapılandırma okuma/güncelleme/silme davranışı.
+- Uygulama testi: büyütecin gerçek hareket olmadan belirmediği ve tıklamanın
+  onu kapattığı denetleniyor. Testler artık 8 dosyada 41 test.
+
+### Düzeltildi
+- **Büyüteç dokunmatik ekranlarda ekranı kapatıyordu.** Faresi olmayan bir
+  cihazda (Raspberry Pi + 7" dokunmatik panel) pencere imlecin altında
+  açıldığında gelen tek hareket olayı "imleç durdu" sayılıyor, daire beliriyor
+  ve onu gizleyecek yeni bir hareket hiç gelmediği için kalıcı olarak ekranda
+  kalıyordu.
+  - Büyüteç artık **gerçek hareket** bekliyor: imleç en az 3 piksel oynamadan
+    daire belirmez. Panoya dokunmak/tıklamak daireyi kapatır ve yeniden
+    hareket bekler; imleç pencereden çıkınca durum sıfırlanır.
+  - `"buyutec": "auto"` (yeni varsayılan): fare/dokunmatik yüzey sunan bir
+    girdi aygıtı yoksa (`/proc/bus/input/devices` içindeki göreli eksenler)
+    büyüteç kendiliğinden kapalıdır. Tasarım alanı 640×320'den küçük
+    ekranlarda da kapalıdır (daire ekranın yarısını kaplıyordu).
+  - `--buyutec` / `--buyutec-yok` ile istenirse zorlanabilir. Açılışta karar ve
+    gerekçesi yazılır: `büyüteç : kapalı (fare yok (dokunmatik ekran))`.
+- `ortam._eksen_ayristir`: çok kelimeli bit maskeleri (`B: ABS=2608000 1000003`)
+  yanlış ayrıştırılıyordu — çekirdek kelimeleri en anlamlıdan başlayarak yazar,
+  bit 0–31 son kelimededir.
+- `ayar.guncelle`: pano terminal yazı boyutunu kaydederken **tüm** ayarları
+  (varsayılanlar dahil) dosyaya yazıyordu; artık yalnızca değişen anahtar
+  yazılır, böylece `"buyutec": "auto"` gibi akıllı varsayılanlar sabitlenmez.
+  Daha önce çalıştırılmış bir cihazda `~/.config/syspano/config.json` içinde
+  `"buyutec": true` kaldıysa o satırı silin (ya da dosyayı silin).
+
 ## [1.0.0] — 2026-10-08
 
 İlk sürüm: ASUS ScreenPad'e özel panonun cihazdan bağımsız hâli.

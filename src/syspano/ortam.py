@@ -132,6 +132,79 @@ def makine_modeli():
     return ""
 
 
+# ─── girdi aygıtları (fare var mı?) ──────────────────────────────────────────
+def _eksen_ayristir(metin, onek):
+    """Verilen 'B: <onek>=' satırlarının bit maskelerini döndürür.
+
+    Maske birden çok kelime olabilir (32 bitten uzun bitmap'ler). Çekirdek
+    kelimeleri **en anlamlıdan başlayarak** yazar, yani bit 0–31 **son**
+    kelimededir; X ve Y eksenleri orada aranır.
+    """
+    maskeler = []
+    for satir in (metin or "").splitlines():
+        satir = satir.strip()
+        if not satir.startswith(f"B: {onek}="):
+            continue
+        parcalar = satir.split("=", 1)[1].split()
+        if not parcalar:
+            continue
+        try:
+            maskeler.append(int(parcalar[-1], 16))
+        except ValueError:
+            continue
+    return maskeler
+
+
+def goreli_ayristir(metin):
+    """/proc/bus/input/devices içeriğinde göreli işaretçi (fare/dokunmatik yüzey)
+    var mı? REL_X (bit 0) ve REL_Y (bit 1) birlikte aranır."""
+    for maske in _eksen_ayristir(metin, "REL"):
+        if maske & 0x1 and maske & 0x2:
+            return True
+    return False
+
+
+def mutlak_ayristir(metin):
+    """Dokunmatik panel gibi mutlak işaretçi var mı? (ABS_X, ABS_Y)"""
+    for maske in _eksen_ayristir(metin, "ABS"):
+        if maske & 0x1 and maske & 0x2:
+            return True
+    return False
+
+
+def _girdi_aygitlari():
+    try:
+        with open("/proc/bus/input/devices") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def goreli_isaretci_var():
+    """Fare ya da dokunmatik yüzey var mı?
+
+    Fare ve dokunmatik yüzeyler **göreli** eksen (REL_X/REL_Y) sunar; dokunmatik
+    paneller ise yalnızca **mutlak** eksen (ABS_X/ABS_Y). SysPano bu ayrımı
+    büyüteci yalnızca faresinin olduğu cihazlarda açmak için kullanır: fare
+    olmayan bir dokunmatik panelde büyüteç belirip kaybolmadığı için ekranı
+    kalıcı olarak kapatıyordu.
+
+    Bilgi okunamazsa True döner (büyüteci gereksiz yere kapatmayalım).
+    """
+    icerik = _girdi_aygitlari()
+    if icerik is None:
+        return True
+    return goreli_ayristir(icerik)
+
+
+def dokunmatik_var():
+    """Mutlak işaretçi (dokunmatik panel) var mı?"""
+    icerik = _girdi_aygitlari()
+    if icerik is None:
+        return False
+    return mutlak_ayristir(icerik)
+
+
 def islemci_adi():
     """/proc/cpuinfo'dan okunabilir işlemci adı. Önce 'model name' aranır
     (x86); yoksa ARM/SoC alanları ('Hardware', 'cpu model') denenir."""

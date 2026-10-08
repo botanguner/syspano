@@ -7,6 +7,8 @@ tutulur, ana döngü elle adımlanır.
 import os
 import time
 
+from syspano import ortam
+
 
 def _pano_olustur(**ek):
     import tkinter as tk
@@ -92,6 +94,68 @@ def test_kaydirma():
             p.kaydir = p._max_kaydir
             p.ciz()
             assert abs(p.cek.kaydir - p._max_kaydir) < 1
+    finally:
+        p.kapat()
+
+
+def test_buyutec_karari():
+    """'auto' modu fare yokken kapanmalı, elle verilen değerler korunmalı."""
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        eski = ortam.goreli_isaretci_var
+        try:
+            p.ayarlar["buyutec"] = "auto"
+            ortam.goreli_isaretci_var = lambda: False
+            karar, neden = p._buyutec_karar()
+            assert karar is False, "fare yokken büyüteç açık kaldı"
+            assert "fare" in neden
+            ortam.goreli_isaretci_var = lambda: True
+            assert p._buyutec_karar()[0] is True
+        finally:
+            ortam.goreli_isaretci_var = eski
+        p.ayarlar["buyutec"] = False
+        assert p._buyutec_karar()[0] is False
+        p.ayarlar["buyutec"] = True
+        assert p._buyutec_karar()[0] is True
+    finally:
+        p.kapat()
+
+
+def test_buyutec_gercek_hareket_ister():
+    """Fare oynamadan büyüteç belirmemeli; dokunma/tıklama onu kapatmalı."""
+    p = _pano_olustur(buyutec=True)
+    if p is None:
+        return
+    try:
+        _bekle(p, 1.0)
+        p.mercek = None
+        p.mercek_yer = (p.w // 2, p.h // 2)
+        p.mercek_zaman = time.monotonic() - 5
+        p._mercek_denetle()
+        assert p.mercek is None, "hareket olmadan büyüteç belirdi"
+
+        class Olay:
+            pass
+
+        o = Olay()
+        o.x, o.y = 200, 200
+        p._fare(o)                       # ilk olay: hareket sayılmaz
+        o.x, o.y = 260, 240
+        p._fare(o)                       # imleç gerçekten oynadı
+        assert p._gercek_hareket is True
+        p.mercek_zaman = time.monotonic() - 5
+        p._mercek_denetle()
+        assert p.mercek == (260, 240), "hareketten sonra büyüteç belirmedi"
+
+        p._basildi(o)                    # tıklama/dokunma büyüteci kapatır
+        assert p.mercek is None
+        assert p._gercek_hareket is False
+
+        # imleç pencereden çıkınca sıfırlanır
+        p._fare_cikti()
+        assert p.mercek_yer is None and p._fare_son is None
     finally:
         p.kapat()
 
