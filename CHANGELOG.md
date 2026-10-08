@@ -27,12 +27,30 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 - **Büyüteç**: yüksek yoğunluklu panellerde imleç durunca beliren dairesel
   büyütme; kırpma sayesinde fare gezerken maliyeti yok.
 - **CLI ve yapılandırma**: `~/.config/syspano/config.json`, `--yapilandir`,
-  `--kartlar/--kart-ekle/--kart-cikar`, `--olcek`, `--tema`.
+  `--varsayilan-yapilandirma`, `--kartlar/--kart-ekle/--kart-cikar`,
+  `--kartlari-listele`, `--olcek`, `--tema`, `--aralik`, `--yonetilen`,
+  `--mod/--pencere/--tam-ekran`.
 - **Paketleme**: `pyproject.toml` (pip/pipx), `install.sh` (apt/dnf/pacman/
   zypper tanıma, venv kurulumu, otomatik başlatma, systemd kullanıcı servisi),
   `desktop/`, `systemd/`, `run.sh`.
-- **Testler**: yerleşim (14 çözünürlük), geometri kırpma, ekran ayrıştırma ve
-  donanım toplayıcıları — 22 test, Tk/görüntü gerektirmez.
+- **Testler**: yerleşim (14 çözünürlük), geometri kırpma, ekran ayrıştırma,
+  donanım toplayıcıları, kart taşma denetimi ve uygulama duman testi —
+  6 dosyada 27 test. Tk gerektirenler görüntü yoksa kendini atlar.
+
+### Arayüz dayanıklılığı (küçük ekranlar)
+- KPI kartlarının iç yerleşimi artık yüksekliğe göre oransal
+  (`_kpi_duzen`): alçak kartlarda yazı ile çubuk çakışmıyor.
+- `GPU`, `DİSK / AĞ` ve `YEDEK` kartları sabit dikey konumlar yerine kalan
+  yere göre çiziyor; kart kısa olduğunda ayrıntı sırayla düşüyor.
+- Kart başlıkları ve uzun değerler dar kartlarda `…` ile kısaltılıyor
+  (`_kirp`); `GEÇMİŞ` göstergesi sığmayan öğeleri çizmiyor.
+- Yerleşim: kart ağırlıklı yükseklikler sığmazsa satırlar **eşit** yüksekliğe
+  geçiyor (küçük ekranda daha çok satır sığdırıyor); dar düzende (1–2 sütun)
+  iki sütun kaplayan kartlar tek sütuna iniyor, sütun boşa gitmiyor.
+- Ekrana sığmayan içerik için sağ kenarda **kaydırma çubuğu**; görüntü dışı
+  kartlar hiç çizilmiyor.
+- Panonun yeniden çizim döngüsü, pencere kapandıktan sonra çalışmıyor
+  (`_kapali` denetimi) — testlerde ve hızlı aç/kapa durumunda hata vermiyor.
 
 ### Düzeltildi (orijinal ScreenPad panosundan devralınan hatalar)
 - `parca_kirp`: çemberi hiç kesmeyen doğru parçası "tamamen görünür"

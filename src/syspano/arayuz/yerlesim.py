@@ -19,7 +19,7 @@ KART_BILGI = {
     "cpu":      {"baslik": "CPU",                 "sutun": 1, "yuk": 1.00, "oncelik": 100},
     "bellek":   {"baslik": "BELLEK",              "sutun": 1, "yuk": 1.00, "oncelik": 99},
     "sicaklik": {"baslik": "SICAKLIK / FAN",      "sutun": 1, "yuk": 1.00, "oncelik": 95},
-    "pil":      {"baslik": "PİL",                 "sutun": 1, "yuk": 1.00, "oncelik": 62},
+    "pil":      {"baslik": "PİL",                 "sutun": 1, "yuk": 1.00, "oncelik": 84},
     "cekirdek": {"baslik": "ÇEKİRDEK KULLANIMI",  "sutun": 2, "yuk": 0.72, "oncelik": 80},
     "gecmis":   {"baslik": "GEÇMİŞ (son 4 dk)",   "sutun": 2, "yuk": 0.72, "oncelik": 70},
     "gpu":      {"baslik": "GPU",                 "sutun": 1, "yuk": 1.45, "oncelik": 66},

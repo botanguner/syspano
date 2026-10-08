@@ -1,45 +1,41 @@
-"""Pencere yerleştirme: pencereyi hedef ekrana tam oturtur.
+"""Pencerenin hedef ekrana yerleştirilmesi.
 
-İki yol vardır:
+Masaüstüne göre üç yol izlenir:
 
-* **KWin (KDE):** pencere "yönetilen" bırakılır (klavye odağı alabilsin) ve
-  geometri KWin betiğiyle ayarlanır; çerçevesiz, en üstte ve görev çubuğunda
-  görünmez yapılır.
-* **Diğer ortamlar (GNOME, Xfce, labwc/sway, saf X11):** pencere yöneticisiz
-  (`overrideredirect`) açılır; KWin betiği olmadığı için konum doğrudan Tk
-  geometry ile verilir ve "en üstte" özniteliği kullanılır.
+| Ortam | Yöntem |
+|---|---|
+| KDE (KWin) | KWin betiği: çerçevesiz, görev çubuğunda yok, tam konum, klavye odağı |
+| Diğer X11/Xwayland | `overrideredirect` pencere: yöneticisiz, tam konum, en üstte |
+| `--pencere` modu | Normal yönetilen pencere (her yerde çalışır) |
 
-X11/Xwayland uzayı kullanıldığı için konumlar doğrudan monitörlerin gerçek
-piksel koordinatlarıdır.
+Wayland'de istemciler kendi konumlarını belirleyemez; Tkinter zaten Xwayland
+üzerinden çalışır, bu yüzden Xwayland'ın sanal ekran koordinatları kullanılır.
 """
 
-import os
 import subprocess
 import time
 
 from . import ortam
 
 
-class Yerlesimci:
-    def __init__(self, kok, sinif, kwin=False, tk_geom=(0, 0, 100, 100),
-                 kwin_geom=None, yonetilen=None, baslik="SysPano"):
+class Yerlestirici:
+    def __init__(self, kok, sinif, x, y, w, h, kwin_koord=None, yonetilen=False):
         self.kok = kok
         self.sinif = sinif
-        self.kwin = kwin
-        self.baslik = baslik
-        # X11/Xwayland uzayı → Tk penceresinin boyutu
-        self.tk = tuple(int(v) for v in tk_geom)
-        # KWin mantıksal uzayı → pencere betiğinin geometrisi
-        self.kw = tuple(int(v) for v in (kwin_geom or tk_geom))
-        # KWin dışında varsayılan yöneticisiz pencere; --yonetilen ile değişir
-        self.yonetilen = bool(kwin) if yonetilen is None else bool(yonetilen)
+        self.x, self.y, self.w, self.h = int(x), int(y), int(w), int(h)
+        # KWin'in mantıksal koordinatları (varsa); KWin betiği bunları kullanır
+        self.kx, self.ky, self.kw, self.kh = (kwin_koord or (x, y, w, h))
+        self.kwin = ortam.kwin_var() and ortam.komut_var("qdbus-qt6")
+        self.yonetilen = yonetilen
+        self.son_deneme = 0.0
 
-    # ── pencereyi hazırla ──
-    def hazirla(self):
-        """Pencereyi haritalamadan önce tipini/çerçevesini ayarlar."""
-        if self.kwin and self.yonetilen:
-            # Tk pencere tipini 'utility' yapar: KWin bunu görev çubuğunda
-            # listelemez ama pencere klavye odağı alabilir.
+    def pencere_hazirla(self):
+        """Pencere türünü ayarlar: KWin'de yönetilen, diğerinde yöneticisiz."""
+        if self.yonetilen:
+            return
+        if self.kwin:
+            # Yönetilen pencere: klavye odağı alabilmesi için gerekli.
+            # KWin onu görev çubuğunda listelemesin diye türü 'utility'.
             try:
                 self.kok.attributes("-type", "utility")
             except Exception:
@@ -49,42 +45,37 @@ class Yerlesimci:
                 self.kok.overrideredirect(True)
             except Exception:
                 pass
-            self._en_ustte()
-
-    def _en_ustte(self):
-        try:
-            self.kok.attributes("-topmost", True)
-        except Exception:
             try:
-                self.kok.attributes("-topmost", 1)
+                self.kok.attributes("-topmost", True)
             except Exception:
                 pass
+        try:
+            self.kok.geometry(f"{self.w}x{self.h}+{self.x}+{self.y}")
+        except Exception:
+            pass
 
-    # ── konumlandır ──
-    def yerlestir(self, deneme=3):
-        # Tk her zaman X11/Xwayland koordinatlarıyla boyutlanır (piksel birebir)
-        x, y, w, h = self.tk
-        self.kok.geometry(f"{w}x{h}+{x}+{y}")
-        if self.kwin and self.yonetilen:
-            return self._kwin_yerlestir(deneme)
-        self.kok.lift()
-        return True
+    def uygula(self):
+        """Konumu uygular. Başarılıysa True."""
+        if self.yonetilen:
+            try:
+                self.kok.geometry(f"{self.w}x{self.h}+{self.x}+{self.y}")
+                return True
+            except Exception:
+                return False
+        if self.kwin:
+            return self._kwin_betik()
+        return self._tk_geometri()
 
     # ── KWin betiği ──
-    def _kwin_yerlestir(self, deneme=3):
-        x, y, w, h = self.kw          # KWin mantıksal koordinatları
-        if self.sinif.lower() in ("", "none"):
-            return False
+    def _kwin_betik(self):
         betik = (
             'let b = 0, a = "";\n'
             'try {\n'
             '  const l = workspace.windowList();\n'
             '  for (let i = 0; i < l.length; i++) {\n'
-            f'    if (String(l[i].resourceClass || "").toLowerCase() === "{self.sinif.lower()}") {{\n'
-            # SIRA ÖNEMLİ: geometri önce. Tersi durumda KWin pencereyi
-            # "maximize" durumuna geçirirken istemciye _NET_WM_STATE yazar ve
-            # SKIP_TASKBAR işareti silinir.
-            f'      l[i].frameGeometry = {{ x: {x}, y: {y}, width: {w}, height: {h} }};\n'
+            f'    if (String(l[i].resourceClass || "").toLowerCase() === "{self.sinif}") {{\n'
+            f'      l[i].frameGeometry = {{ x: {self.kx}, y: {self.ky}, '
+            f'width: {self.kw}, height: {self.kh} }};\n'
             '      l[i].noBorder = true; l[i].keepAbove = true; l[i].skipTaskbar = true;\n'
             '      b++;\n'
             '    }\n'
@@ -92,56 +83,48 @@ class Yerlesimci:
             '} catch (e) { a = " HATA:" + e; }\n'
             'throw new Error("PANO| yerlestirildi=" + b + a);'
         )
-        yol = "/tmp/syspano-yerlestir.js"
-        for _ in range(deneme):
-            try:
-                with open(yol, "w") as f:
-                    f.write(betik)
-                sid = subprocess.run(
-                    ["qdbus-qt6", "org.kde.KWin", "/Scripting",
-                     "org.kde.kwin.Scripting.loadScript", yol],
-                    capture_output=True, text=True, timeout=5).stdout.strip()
-                if sid.isdigit():
-                    subprocess.run(["qdbus-qt6", "org.kde.KWin", f"/Scripting/Script{sid}",
-                                    "org.kde.kwin.Script.run"], capture_output=True, timeout=5)
-                    subprocess.run(["qdbus-qt6", "org.kde.KWin", "/Scripting",
-                                    "org.kde.kwin.Scripting.unloadScript", yol],
-                                   capture_output=True, timeout=5)
-                    return True
-            except Exception:
-                pass
-            time.sleep(0.5)
+        yol = f"/tmp/{self.sinif}-yerlestir.js"
+        try:
+            with open(yol, "w") as f:
+                f.write(betik)
+            sid = subprocess.run(
+                ["qdbus-qt6", "org.kde.KWin", "/Scripting",
+                 "org.kde.kwin.Scripting.loadScript", yol],
+                capture_output=True, text=True, timeout=5).stdout.strip()
+            if sid.isdigit():
+                subprocess.run(["qdbus-qt6", "org.kde.KWin", f"/Scripting/Script{sid}",
+                                "org.kde.kwin.Script.run"], capture_output=True, timeout=5)
+                subprocess.run(["qdbus-qt6", "org.kde.KWin", "/Scripting",
+                                "org.kde.kwin.Scripting.unloadScript", yol],
+                               capture_output=True, timeout=5)
+                return True
+        except Exception:
+            pass
         return False
 
-    # ── görev çubuğu bekçisi (yalnızca KWin) ──
-    def gorev_cubugu_denetle(self):
-        """SKIP_TASKBAR işareti düşmüşse geri koyar ve yerleştirmeyi yeniler."""
-        if not (self.kwin and self.yonetilen):
+    # ── Tk ile konumlandırma (yöneticisiz pencere) ──
+    def _tk_geometri(self):
+        try:
+            self.kok.geometry(f"{self.w}x{self.h}+{self.x}+{self.y}")
+            self.kok.lift()
+            return True
+        except Exception:
+            return False
+
+    def gorev_cubugu_koru(self):
+        """X11'de skip-taskbar işaretini yerinde tutar (KWin dışı için geçersiz)."""
+        if self.kwin or self.yonetilen:
+            return
+        if not ortam.komut_var("xprop"):
             return
         try:
-            adaylar = set()
-            try:
-                adaylar.add(hex(self.kok.winfo_id()))
-            except Exception:
-                pass
-            try:
-                c = ortam.komut(["wmctrl", "-l"])
-                for satir in c.splitlines():
-                    if self.baslik in satir:
-                        adaylar.add(satir.split()[0])
-            except Exception:
-                pass
-            eksik = False
-            for wid in adaylar:
-                c = ortam.komut(["xprop", "-id", wid, "_NET_WM_STATE"])
-                if c.strip() and "SKIP_TASKBAR" not in c:
-                    eksik = True
-            if eksik:
-                for wid in adaylar:
-                    subprocess.run(["xprop", "-id", wid, "-f", "_NET_WM_STATE", "32a",
-                                    "-set", "_NET_WM_STATE",
-                                    "_NET_WM_STATE_SKIP_TASKBAR,_NET_WM_STATE_ABOVE"],
-                                   capture_output=True, timeout=3)
-                self._kwin_yerlestir(deneme=1)
+            wid = hex(self.kok.winfo_id())
+            cikti = subprocess.run(["xprop", "-id", wid, "_NET_WM_STATE"],
+                                   capture_output=True, text=True, timeout=3).stdout
+            if cikti.strip() and "ABOVE" not in cikti:
+                subprocess.run(["xprop", "-id", wid, "-f", "_NET_WM_STATE", "32a",
+                                "-set", "_NET_WM_STATE",
+                                "_NET_WM_STATE_ABOVE,_NET_WM_STATE_SKIP_TASKBAR"],
+                               capture_output=True, timeout=3)
         except Exception:
             pass

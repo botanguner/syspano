@@ -41,13 +41,14 @@ PARLAK = [
 class Terminal:
     """PTY'ye bağlı, Tk Canvas üzerine çizen basit terminal."""
 
-    def __init__(self, canvas, x, y, w, h, S, calisma_dizini=None, kabuk=None, yazi_boyut=None):
+    def __init__(self, canvas, x, y, w, h, S, calisma_dizini=None, kabuk=None,
+                 yazi_boyut=None, yazi_ailesi=None):
         self.c = canvas
         self.x, self.y, self.w, self.h = x, y, w, h
         self.S = S
         self.calisma_dizini = calisma_dizini or os.path.expanduser("~")
         self.kabuk = kabuk or os.environ.get("SHELL", "/bin/bash")
-        self.yazi_ailesi = _yazi_ailesi()
+        self.yazi_ailesi = yazi_ailesi or YAZI
 
         # yazı boyutu (piksel). Yüksek yoğunluklu panellerde okunabilirlik
         # için pano ölçeğe göre daha büyük bir değer verir.
@@ -584,4 +585,4 @@ class Terminal:
         if not self.calisiyor:
             c.create_text(self.x + self.w / 2, self.y + self.h / 2,
                           text="kabuk kapandı — tıklayıp 'Yeniden başlat' düğmesini kullanın",
-                          fill="#8b93a7", font=(YAZI, -int(16 * S)), tags=etiket)
+                          fill="#8b93a7", font=(self.yazi_ailesi, -int(16 * S)), tags=etiket)
