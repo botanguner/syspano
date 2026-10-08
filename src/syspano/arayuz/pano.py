@@ -10,6 +10,7 @@ Uyarlanabilirlik üç yerden gelir:
 """
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from collections import deque
 
 from .. import ayar as ayar_modul
 from .. import ortam
+from ..cihaz import servisler as servis_modul
 from ..toplayici import Toplayici
 from ..yerlestir import Yerlestirici
 from . import ayar_ekrani
@@ -76,9 +78,16 @@ class Pano:
         self.tasarim_y = max(240, int(round(self.h / self.S)))
 
         # ── durum ──
-        self.gorunum = "pano"                 # "pano" | "terminal" | "ayar"
+        self.gorunum = "pano"                 # "pano" | "terminal" | "ayar" | "log"
         if ayarlar.get("baslangic_gorunumu") in ("pano", "terminal", "ayar"):
             self.gorunum = ayarlar["baslangic_gorunumu"]
+        # günlük görüntüleyici
+        self.log_birim = None
+        self.log_metin = ""
+        self.log_kaynak = ""
+        self.log_zaman = 0.0
+        self.log_yenileme = 0.0
+        self.log_sonuna = False
         self.terminal = None
         self.gorunur = True
         self.kaydir = 0.0
@@ -204,6 +213,8 @@ class Pano:
                 continue
             if k == "yedek" and (v.get("yedek") or {}).get("yok"):
                 continue
+            if k == "servisler" and (v.get("servisler") or {}).get("yok"):
+                continue
             if k == "sicaklik" and not (v.get("sicaklik") or {}).get("sensor_var"):
                 continue
             hazir.append(k)
@@ -301,6 +312,11 @@ class Pano:
             if self.terminal:
                 self.terminal.ciz(zorla=True)
             return 500                       # imleç yanıp sönsün diye daha sık
+        if self.gorunum == "log" and self.log_birim:
+            # görüntüleyici açıkken günlüğü kendiliğinden tazele
+            if time.monotonic() - self.log_zaman >= self.LOG_ARALIK:
+                self.log_yenile()
+            return max(300, int(self.ayarlar.get("guncelleme_ms", 1000)))
         return max(200, int(self.ayarlar.get("guncelleme_ms", 1000)))
 
     def _kare_degistir(self):
@@ -325,7 +341,9 @@ class Pano:
         c = self.cek
         durum = None
         # kaydırma sınırları
-        if self.gorunum == "ayar":
+        if self.gorunum == "log":
+            self._max_kaydir = max(0.0, self._log_icerik_y() * self.S - self.h)
+        elif self.gorunum == "ayar":
             durum = self._ayar_durumu()
             self._ayar_plan = ayar_ekrani.yerlesim(
                 self.tasarim_g, self.tasarim_y, self.ayarlar, self.cikislar, durum)
@@ -335,24 +353,37 @@ class Pano:
         else:
             self._max_kaydir = 0.0
         self.kaydir = max(0.0, min(self.kaydir, self._max_kaydir))
+        if self.gorunum == "log" and getattr(self, "log_sonuna", False):
+            self.kaydir = self._max_kaydir          # günlükte en yeni satırlar
+            self.log_sonuna = False
 
         # içerik (kaydırmalı) — hem "kare" hem "icerik" etiketi alır
-        c.kaydir_ayarla(self.kaydir)
-        c.etiket((KARE_YENI, ICERIK))
-        if self.gorunum == "ayar":
-            ayar_ekrani.ciz(c, self._ayar_plan, durum)
-        elif plan:
-            for kid, (x, y, w, h) in plan["kartlar"].items():
-                # ekran dışında kalan kartı hiç çizme (kaydırmada hız kazancı)
-                if (y + h) * self.S - self.kaydir < 0 or y * self.S - self.kaydir > self.h:
-                    continue
-                fonk = kartlar_modul.CIZIM.get(kid)
-                if fonk:
-                    try:
-                        fonk(c, x, y, w, h, v, self.gecmis)
-                    except Exception as hata:
-                        c.yazi(x + 14, y + h / 2, f"kart hatası: {hata}"[:44], 10,
-                               c.renk["kirmizi"])
+        kartlar_modul.TIKLANABILIR.clear()
+        if self.gorunum == "log":
+            # başlık sabit (üst şerit gibi), satırlar kaydırılır
+            c.etiket(KARE_YENI)
+            c.kaydir_ayarla(0.0)
+            self._log_baslik_ciz()
+            c.etiket((KARE_YENI, ICERIK))
+            c.kaydir_ayarla(self.kaydir)
+            self._log_satirlari_ciz()
+        else:
+            c.kaydir_ayarla(self.kaydir)
+            c.etiket((KARE_YENI, ICERIK))
+            if self.gorunum == "ayar":
+                ayar_ekrani.ciz(c, self._ayar_plan, durum)
+            elif plan:
+                for kid, (x, y, w, h) in plan["kartlar"].items():
+                    # ekran dışında kalan kartı hiç çizme (kaydırmada hız kazancı)
+                    if (y + h) * self.S - self.kaydir < 0 or y * self.S - self.kaydir > self.h:
+                        continue
+                    fonk = kartlar_modul.CIZIM.get(kid)
+                    if fonk:
+                        try:
+                            fonk(c, x, y, w, h, v, self.gecmis)
+                        except Exception as hata:
+                            c.yazi(x + 14, y + h / 2, f"kart hatası: {hata}"[:44], 10,
+                                   c.renk["kirmizi"])
         c.etiket(KARE_YENI)
         # üst şerit, alt bilgi ve çubuklar kaydırmadan etkilenmez
         c.kaydir_ayarla(0.0)
@@ -369,6 +400,84 @@ class Pano:
         yuk = max(30.0, oran * self.h)
         ust = (self.kaydir / self._max_kaydir) * (self.h - yuk)
         self.cek.dik_ekran(self.w - 7, ust, self.w - 3, ust + yuk, self.R["soluk"])
+
+    # ── günlük görüntüleyici ──
+    LOG_BASLIK_Y = 70.0      # başlık satırı (üst şeridin ALTINDA)
+    LOG_UST = 90.0           # ilk günlük satırının tasarım yüksekliği
+    LOG_SATIR_Y = 15.0       # satır aralığı (tasarım birimi)
+    LOG_ARALIK = 8.0         # saniye; görüntüleyici açıkken kendiliğinden yenileme
+
+    def log_ac(self, birim):
+        """Bir servisin günlüğünü açar (SERVİSLER kartındaki satıra dokununca)."""
+        if not birim:
+            return
+        self.log_birim = birim
+        self.log_sonuna = True
+        self.log_yenile(ilk=True)
+        self.gorunum_degistir("log")
+
+    def log_yenile(self, ilk=False):
+        if not self.log_birim:
+            return
+        satir = int(self.ayarlar.get("servis_log_satir") or 200)
+        try:
+            metin, kaynak = servis_modul.gunluk(self.log_birim, satir, self.ayarlar)
+        except Exception as hata:
+            metin, kaynak = f"(günlük okunamadı: {hata})", "hata"
+        self.log_metin = metin
+        self.log_kaynak = kaynak
+        self.log_zaman = time.monotonic()
+        if ilk:
+            self.log_sonuna = True
+
+    def _log_satirlar(self):
+        return self.log_metin.splitlines() if self.log_metin else []
+
+    def _log_icerik_y(self):
+        return self.LOG_UST + len(self._log_satirlar()) * self.LOG_SATIR_Y + 24
+
+    def _log_baslik_ciz(self):
+        """Sabit başlık: servis adı, kaynak, yenile düğmesi (kaydırmaz)."""
+        c, R = self.cek, self.R
+        x0 = 14.0
+        yb = self.LOG_BASLIK_Y
+        c.yazi(x0, yb, str(self.log_birim), 12, R["mavi"], True)
+        yas = int(time.monotonic() - self.log_zaman) if self.log_zaman else 0
+        c.yazi(x0 + self._metin_gen(self.log_birim, 12, True) + 14, yb,
+               f"{self.log_kaynak} · {yas} sn önce · kaydırarak gezinin",
+               10, R["cok_soluk"])
+        dug = (self.tasarim_g - 14 - 92, yb - 14, 92, 28)
+        c.dik(dug[0], dug[1], dug[0] + dug[2], dug[1] + dug[3], R["dugme"], R["kenar"])
+        c.yazi(dug[0] + dug[2] / 2, dug[1] + dug[3] / 2 + 1, "⟳ Yenile", 11,
+               R["yazi"], True, "center")
+        kartlar_modul.TIKLANABILIR.append((("yenile", None), dug))
+
+    def _log_satirlari_ciz(self):
+        """Kaydırılan günlük satırları (yalnızca görünenler çizilir)."""
+        c, R = self.cek, self.R
+        x0 = 14.0
+        gen = self.tasarim_g - 28.0
+        satirlar = self._log_satirlar()
+        if not satirlar:
+            c.yazi(x0, self.LOG_UST, "(günlük boş)", 11, R["soluk"])
+            return
+        satir_px = self.LOG_SATIR_Y * self.S
+        # Satırlar başlığın ALTINDAKİ bantta görünür; kaydırmaya göre hangi
+        # satırların çizileceğini hesaplarız (üstte başlığa taşmasın).
+        ilk = max(0, int(math.ceil(self.kaydir / satir_px)))
+        son = min(len(satirlar),
+                  int((self.kaydir + self.h - self.LOG_UST * self.S) / satir_px) + 2)
+        for i in range(ilk, son):
+            metin = satirlar[i]
+            dusuk = metin.lower()
+            if "error" in dusuk or "fail" in dusuk or "hata" in dusuk:
+                renk = R["kirmizi"]
+            elif "warn" in dusuk or "uyarı" in dusuk:
+                renk = R["sari"]
+            else:
+                renk = R["yazi"] if i >= len(satirlar) - 30 else R["soluk"]
+            c.yazi(x0, self.LOG_UST + i * self.LOG_SATIR_Y,
+                   kartlar_modul._kirp(c, metin, 10.5, gen), 10.5, renk)
 
     # ── ayar ekranı ──
     def _bildir(self, metin):
@@ -581,7 +690,7 @@ class Pano:
         s = v.get("sistem") or {}
         up = int(s.get("uptime_sn", 0))
         baslik = {"pano": "▣  SYSPANO", "terminal": "▶  TERMINAL",
-                  "ayar": "⚙  AYARLAR"}.get(self.gorunum, "▣  SYSPANO")
+                  "ayar": "⚙  AYARLAR", "log": "≡  GÜNLÜK"}.get(self.gorunum, "▣  SYSPANO")
         c.yazi(18, 23, baslik, 12, R["mavi"], True)
 
         # orta bilgi: düğmelere çarpmayacak en uzun sürüm seçilir
@@ -796,6 +905,23 @@ class Pano:
             if isaret:
                 self._ayar_isle(*isaret)
             return
+        if self.gorunum == "log":
+            dx, dy = olay.x / self.S, (olay.y + self.kaydir) / self.S
+            for eylem, (qx, qy, qw, qh) in kartlar_modul.TIKLANABILIR:
+                if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
+                    if eylem[0] == "yenile":
+                        self.log_yenile()
+                    self.ciz()
+                    return
+            return
+        if self.gorunum == "pano":
+            # servis satırına dokunulduysa günlüğünü aç
+            dx, dy = olay.x / self.S, (olay.y + self.kaydir) / self.S
+            for eylem, (qx, qy, qw, qh) in kartlar_modul.TIKLANABILIR:
+                if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
+                    if eylem[0] == "log":
+                        self.log_ac(eylem[1])
+                    return
         if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
             self.terminal_baslat()
             self.kok.focus_force()
@@ -821,7 +947,7 @@ class Pano:
             self.ciz()
 
     def _tus(self, olay):
-        if olay.keysym == "Escape" and self.gorunum == "ayar":
+        if olay.keysym == "Escape" and self.gorunum in ("ayar", "log"):
             self.gorunum_degistir("pano")
             return "break"
         if olay.state & 0x4:
@@ -845,12 +971,15 @@ class Pano:
             self.bildiri = "terminal kapalı (yapılandırma)"
             self.bildiri_zaman = time.monotonic()
             return
-        if yeni not in ("pano", "terminal", "ayar"):
+        if yeni not in ("pano", "terminal", "ayar", "log"):
             return
         self.gorunum = yeni
-        if yeni == "ayar":
+        if yeni in ("ayar", "log"):
             self.kaydir = 0.0
             self._ayar_plan = None
+        if yeni == "log" and self.log_birim is None:
+            yeni = "pano"                     # açılacak günlük yoksa panoya dön
+            self.gorunum = "pano"
         if yeni == "terminal":
             if self.terminal is None:
                 self.terminal_baslat()

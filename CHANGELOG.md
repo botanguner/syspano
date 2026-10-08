@@ -3,6 +3,46 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.3.0] — 2026-10-08
+
+### Eklendi
+- **SERVİSLER kartı ve günlük görüntüleyici.** Sunucu makinelerde Apache,
+  MySQL/MariaDB, PostgreSQL, nginx, Docker gibi systemd servislerinin durumu
+  (renkli nokta · çalışma süresi · bellek; **bozuklar en üstte**) ve **bir
+  satıra dokununca açılan günlük görünümü**: son 200 satır, parmakla kaydırma,
+  `⟳ Yenile` düğmesi, açıkken 8 saniyede bir tazeleme, `error`/`fail` satırları
+  kırmızı, `warn` satırları sarı.
+  - İzlenen servisler: yaygın sunucu servislerinden **kurulu olanlar**,
+    **başarısız (failed)** birimler ve `config.json`'daki `"servisler"`.
+    systemd takma adları asıl ada çevrilir (`mysqld.service` → `mariadb.service`).
+  - `servis_log_dosyalari` ile bir servisin kendi log dosyası (ör. Apache
+    `error.log`) okunur; yoksa `journalctl` kullanılır.
+  - systemd yoksa kart gizlenir, panonun geri kalanı çalışır.
+  - Komut satırı: `syspano --servisler`, `syspano --log BIRIM [--log-satir N]`.
+- Ölçülerek ayarlanan maliyet: keşif (tüm birimler, ~100 ms) yalnızca açılışta
+  ve 10 dakikada bir; durum **tek** `systemctl show` çağrısıyla 10 saniyede bir
+  (~30 ms); günlük yalnızca görüntüleyici açıkken (~20 ms).
+- Belgeler: README'de **Servisler ve günlükler** ile **Teknolojiler** bölümleri;
+  wiki'de yeni **Teknolojiler** sayfası ve güncellenen Kartlar/Kullanım/Ayarlar/
+  Mimari/Performans/Sorun-Giderme sayfaları. Teknolojiler sayfası projenin hangi
+  araçlarla ve **yapay zekâ desteğiyle** nasıl geliştirildiğini anlatır
+  (ölçüm → iyileştirme → gerçek cihazda doğrulama → regresyon testi).
+
+### Düzeltildi
+- `servisler`: `systemctl show` bloklarını istenen sıraya göre eşleştirmek
+  yanlıştı — systemd takma adları **asıl ada** çevirir (`mysqld.service` →
+  `mariadb.service`), bu yüzden yanlış birimin durumu gösterilebiliyordu. Artık
+  her blok kendi `Id` alanından okunuyor.
+- `servisler`: log dosyası eşleşmesi tek yönlüydü (`apache2` **ya da**
+  `apache2.service`); artık iki yön de deneniyor.
+- **Günlük görünümünün başlığı** kaydırmayla birlikte yukarı kayıp görünmez
+  oluyordu; artık üst şerit gibi sabit ve satırlar başlığın altındaki bantta
+  kaydırılıyor.
+
+### Notlar
+- Testler: **12 dosyada 98 test** (servis ayrıştırma, takma ad çözümü, log
+  kuyruğu, günlük görünümü düzeni dahil).
+
 ## [1.2.1] — 2026-10-08
 
 ### Düzeltildi

@@ -76,6 +76,12 @@ def _olustur_ayristirici():
                    help="bağlı ekranları listele ve çık")
     p.add_argument("--kartlari-listele", action="store_true",
                    help="kullanılabilir kartları listele ve çık")
+    p.add_argument("--servisler", action="store_true",
+                   help="izlenen systemd servislerini ve durumlarını listele ve çık")
+    p.add_argument("--log", metavar="BIRIM",
+                   help="bir servisin günlüğünü yazdır (ör. --log apache2)")
+    p.add_argument("--log-satir", type=int, default=200, metavar="N",
+                   help="--log ile gösterilecek satır sayısı (varsayılan 200)")
     p.add_argument("--guncelle", action="store_true",
                    help="depoyu güncelle (git pull) ve paketi yeniden kur")
     p.add_argument("--guncelle-denetle", action="store_true",
@@ -168,6 +174,47 @@ def _liste(metin):
     return [k.strip() for k in (metin or "").replace(";", ",").split(",") if k.strip()]
 
 
+# ─── servis komutları ────────────────────────────────────────────────────────
+def _birim_adi(metin):
+    """'apache2' → 'apache2.service' (zaten birim adıysa dokunmaz)."""
+    metin = (metin or "").strip()
+    return metin if "." in metin else metin + ".service"
+
+
+def _servisleri_listele():
+    from .cihaz import servisler as S
+    if not S.systemd_var():
+        print("systemd bulunamadı — bu sistemde servis izleme kapalı.")
+        return 1
+    ayar = ayar_modul.oku()
+    kayitlar = S._durum_oku(S._kesif(ayar))
+    if not kayitlar:
+        print("izlenecek servis bulunamadı.")
+        return 0
+    sira = {"failed": 0, "activating": 1, "active": 2, "reloading": 2}
+    kayitlar.sort(key=lambda k: (sira.get(k["durum"], 3), k["etiket"]))
+    print(f"{'servis':<18} {'durum':<10} {'alt durum':<12} {'bellek':>9}  birim")
+    print("-" * 72)
+    for k in kayitlar:
+        bellek = f"{k['bellek'] / 1048576:.0f} MB" if k["bellek"] else "—"
+        print(f"{k['etiket']:<18} {k['durum']:<10} {k['alt']:<12} {bellek:>9}  {k['ad']}")
+    print(f"\n{len(kayitlar)} servis · günlük için: syspano --log {kayitlar[0]['ad']}")
+    return 0
+
+
+def _log_yazdir(birim, satir):
+    from .cihaz import servisler as S
+    if not S.systemd_var():
+        print("systemd bulunamadı.", file=sys.stderr)
+        return 1
+    ad = _birim_adi(birim)
+    ayar = ayar_modul.oku()
+    metin, kaynak = S.gunluk(ad, max(1, satir), ayar)
+    print(f"# {ad} · kaynak: {kaynak}")
+    print(metin)
+    return 0
+
+
 def main(argv=None):
     args = _olustur_ayristirici().parse_args(argv)
 
@@ -180,6 +227,12 @@ def main(argv=None):
 
     if args.kurulum_bilgisi:
         return _kurulum_bilgisi()
+
+    if args.servisler:
+        return _servisleri_listele()
+
+    if args.log:
+        return _log_yazdir(args.log, args.log_satir)
 
     if args.liste_ekranlar:
         print(ekran_modul.liste_metni())

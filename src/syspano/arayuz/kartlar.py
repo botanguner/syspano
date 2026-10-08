@@ -389,6 +389,84 @@ def yedek(ck, x, y, w, h, v, g):
         yy += 18
 
 
+# ─── servisler (systemd) ─────────────────────────────────────────────────────
+#  Sunucu makinelerde Apache/MySQL/nginx gibi servislerin durumu. Satırlar
+#  tıklanabilir: dokununca o servisin günlüğü açılır. Pano, satır
+#  dikdörtgenlerini bu listeden okur (her karede yeniden doldurulur).
+TIKLANABILIR = []          # [(eylem, (x, y, w, h)), ...]
+
+
+def servis_rengi(ck, durum):
+    return {"active": ck.renk["yesil"], "reloading": ck.renk["sari"],
+            "activating": ck.renk["sari"], "deactivating": ck.renk["sari"],
+            "failed": ck.renk["kirmizi"]}.get(durum, ck.renk["cok_soluk"])
+
+
+def sure_kisa(sn):
+    """Saniyeyi kısa biçime çevirir: '12dk', '31sa', '3g'."""
+    sn = max(0, int(sn))
+    if sn < 3600:
+        return f"{sn // 60}dk"
+    if sn < 86400:
+        return f"{sn // 3600}sa"
+    return f"{sn // 86400}g"
+
+
+def bellek_kisa(bayt):
+    if not bayt:
+        return ""
+    return (f"{bayt / 1024:.0f} KB" if bayt < 1048576 else f"{bayt / 1048576:.0f} MB")
+
+
+def _servis_sirala(birimler):
+    """Önce bozuklar, sonra çalışanlar, sonra durmuşlar gelsin."""
+    sira = {"failed": 0, "activating": 1, "active": 2, "reloading": 2,
+            "deactivating": 3, "inactive": 4}
+    return sorted(birimler, key=lambda b: (sira.get(b.get("durum"), 5),
+                                           b.get("etiket", "")))
+
+
+def servisler(ck, x, y, w, h, v, g):
+    d = v.get("servisler") or {}
+    _baslik(ck, x, y, w, h, "SERVİSLER")
+    if d.get("yok"):
+        return _yok(ck, x, y, w, h, "systemd bulunamadı")
+    birimler = _servis_sirala(d.get("birimler") or [])
+    if not birimler:
+        return _yok(ck, x, y, w, h, "servis bulunamadı")
+
+    ust, alt = y + 34, y + h - 6
+    satir_h = max(24.0, min(40.0, (alt - ust) / max(3, min(6, len(birimler)))))
+    sigar = max(1, int((alt - ust) // satir_h))
+    simdi = time.time()
+
+    for i, s in enumerate(birimler[:sigar]):
+        sy = ust + i * satir_h
+        cy = sy + satir_h / 2
+        durum = s.get("durum")
+        ck.oval(x + 15, cy - 5, x + 25, cy + 5, servis_rengi(ck, durum))
+        ck.yazi(x + 34, cy, _kirp(ck, s.get("etiket", "?"), 11, w - 34 - 92),
+                11, ck.renk["yazi"])
+        if durum == "active":
+            parcalar = []
+            if s.get("baslama"):
+                parcalar.append(sure_kisa(simdi - s["baslama"]))
+            bellek = bellek_kisa(s.get("bellek"))
+            if bellek:
+                parcalar.append(bellek)
+            ayrinti, arenk = " · ".join(parcalar) or (s.get("alt") or ""), ck.renk["soluk"]
+        elif durum == "failed":
+            ayrinti, arenk = "BOZUK", ck.renk["kirmizi"]
+        else:
+            ayrinti, arenk = "kapalı", ck.renk["cok_soluk"]
+        ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, durum == "failed", "e")
+        TIKLANABILIR.append((("log", s.get("ad")), (x + 2, sy, w - 4, satir_h)))
+
+    if len(birimler) > sigar:
+        ck.yazi(x + 34, y + h - 12, f"+{len(birimler) - sigar} servis daha", 10,
+                ck.renk["cok_soluk"])
+
+
 # ─── sistem ──────────────────────────────────────────────────────────────────
 def sistem(ck, x, y, w, h, v, g):
     d = v.get("sistem") or {}
@@ -416,5 +494,5 @@ def sistem(ck, x, y, w, h, v, g):
 CIZIM = {
     "cpu": cpu, "bellek": bellek, "sicaklik": sicaklik, "pil": pil,
     "cekirdek": cekirdek, "gecmis": gecmis, "gpu": gpu, "disk_ag": disk_ag,
-    "surecler": surecler, "yedek": yedek, "sistem": sistem,
+    "surecler": surecler, "servisler": servisler, "yedek": yedek, "sistem": sistem,
 }
