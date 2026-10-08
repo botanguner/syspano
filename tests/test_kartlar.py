@@ -31,7 +31,7 @@ ORNEK = {
     "disk": {"okuma": 12.4, "yazma": 3.1, "dolu": 62.0, "bos_gb": 105.0,
              "toplam_gb": 155.0, "model": "Örnek SSD 512 GB"},
     "ag": {"arayuz": "wlan0", "inen": 120.0, "giden": 22.0, "ip": "192.0.2.10",
-           "tur": "wifi", "sinyal": {"sinyal": -55.0, "gurultu": -90.0}, "hiz": 0},
+           "tur": "wifi"},
     "surecler": {"liste": [(45.0, "tarayici", 1_200_000_000), (20.0, "pencere-yoneticisi", 300_000_000),
                            (12.0, "python3", 50_000_000)], "toplam": 356},
     "guc": {"tur": "RAPL", "pl1": 15, "pl2": 25, "governor": "powersave"},

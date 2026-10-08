@@ -51,7 +51,7 @@ SysPano donanımı tahmin etmez, **ne varsa onu bulur** ve olmayan kartı gizler
 | Pil | `type=Battery` olan herhangi bir güç kaynağı (`BAT0`, `CMB0`, …) |
 | GPU | Intel `gt_cur_freq_mhz` + RC6, AMD `gpu_busy_percent`, NVIDIA `nvidia-smi`, RPi `vcgencmd` |
 | Disk | Kök dosya sisteminin gerçek diski (NVMe/SSD/MMC, btrfs dahil) |
-| Ağ | IPv4 varsayılan yolu; Wi-Fi/Ethernet, sinyal gücü |
+| Ağ | IPv4 varsayılan yolu; Wi-Fi/Ethernet arayüzü, IP adresi, ↓/↑ hızı |
 | Güç limiti | Intel/AMD RAPL (PL1/PL2), `platform_profile`, CPU governor |
 
 ## Kurulum
@@ -312,12 +312,14 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "tepsi": true,
   "guncelleme_ms": 1000,
   "guncelleme_denetimi": true,
+  "otomatik_kart": true,
   "yedek_durum_yolu": "~/.local/state/gdrive-yedek/durum.json",
   "yedek_zamanlayici": "yedek.timer",
   "servisler": [],
   "servis_log_dosyalari": {},
   "servis_aralik": 30,
-  "servis_log_satir": 200
+  "servis_log_satir": 200,
+  "uygulama_basligi": "SysPano"
 }
 ```
 
@@ -468,6 +470,7 @@ PYTHONPATH=src python3 tests/test_kartlar.py     # kart taşması denetimi
 PYTHONPATH=src python3 tests/test_cihaz.py       # gerçek donanım okuma
 PYTHONPATH=src python3 tests/test_servisler.py   # servis durumu ve günlük
 PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
+PYTHONPATH=src python3 tests/test_belgeler.py    # README/wiki kodla uyumlu mu
 ```
 
 | Test | Neyi denetler |
@@ -484,8 +487,9 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | `test_ayar_ekrani.py` | Ayar ekranı yerleşimi: çakışma yok, dokunma hedefleri yeterli, çizim ölçeğe uyuyor, isabet denetimi |
 | `test_guncelleme.py` | Sürüm karşılaştırma, kurulum kaydı ve **gerçek git senaryosuyla** güncelleme |
 | `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi, ayar ekranında dokunma, **servis kartı ve günlük görünümü**; kare öğeleri birikmiyor, çizim döngüsü çoğalmıyor, gizliyken çizilmiyor |
+| `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 
-Toplam **12 dosyada 98 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **13 dosyada 105 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -604,7 +608,7 @@ Kendi log dosyalarını gösteren servisler için (Apache'nin
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 98 test / 12 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 105 test / 13 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

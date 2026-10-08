@@ -3,6 +3,39 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.3.3] — 2026-10-08
+
+### Düzeltildi
+- **Belgeler koddan kopmuştu** (1.3.1 ve 1.3.2 değişiklikleri README/wiki'ye
+  işlenmemişti): "Desteklenen cihazlar" tablosunda Ağ satırı hâlâ *sinyal
+  gücü* diyordu (1.3.1'de kaldırıldı), test sayısı **98** kalmıştı (gerçek:
+  **13 dosyada 105 test**), örnek `config.json` iki ayarı (`otomatik_kart`,
+  `uygulama_basligi`) atlıyordu ve wiki'nin Kartlar sayfası kaldırılan Wi-Fi
+  sinyalini anlatıyordu. Hepsi düzeltildi.
+
+### Değişti
+- **Ölü ayar anahtarları kaldırıldı:** `fare_ile_kaydirma` ve `saydam_olmayan`
+  varsayılanlarda duruyordu ama **hiçbir modül okumuyordu**; `--yapilandir` ve
+  `--varsayilan-yapilandirma` çıktısında artık görünmezler.
+- **Kodda okunan ama varsayılanlarda olmayan ayarlar eklendi:**
+  `guncelleme_denetimi`, `otomatik_kart`, `yedek_durum_yolu`,
+  `yedek_zamanlayici`. Artık `--yapilandir` ile üretilen dosya gerçekten tüm
+  ayarları içerir ve varsayılanlar tek yerde durur.
+- **Ağ modülü yalnızca gösterilen alanları topluyor:** arayüzün bağlantı hızı
+  (`/sys/class/net/*/speed`) saniyede bir okunuyor ama hiç gösterilmiyordu;
+  tıpkı 1.3.1'deki Wi-Fi sinyali gibi kaldırıldı.
+
+### Eklendi
+- **`tests/test_belgeler.py` — belge–kod uyum testleri (6 test).** Belgeler elle
+  yazıldığı için kod değişince geride kalıyordu; artık testler yakalıyor:
+  README'deki `config.json` örneği varsayılanlarla aynı mı, her ayar anahtarı
+  kodda okunuyor mu (ölü anahtar kalmasın), README'deki test sayısı doğru mu,
+  yeni bir kart ya da komut satırı seçeneği README'ye yazılmış mı,
+  `cihaz/yedek.py` sabitleri ayarlarla aynı mı. `SYSPANO_WIKI` bir wiki
+  kopyasını gösteriyorsa test sayısı orada da denetlenir:
+  `SYSPANO_WIKI=/tmp/wiki-clone ./run.sh test belgeler`.
+- README'de **Belge–kod uyumu** testinin ve wiki'nin güncel sayıları.
+
 ## [1.3.2] — 2026-10-08
 
 ### Düzeltildi

@@ -3,7 +3,10 @@
 **Performans notu:** Wi-Fi sinyal gücünü okumak (`/proc/net/wireless`) Raspberry
 Pi'de **~1,8 ms** sürüyor — Wi-Fi sürücüsü her okumada firmware'e soruyor ve bu
 değer arayüzde hiç gösterilmiyordu. Bu yüzden okuma kaldırıldı; sinyal göstermek
-istenirse yavaş sensörlerdeki gibi seyreltilerek eklenmelidir.
+istenirse yavaş sensörlerdeki gibi seyreltilerek eklenmelidir. Aynı gerekçeyle
+arayüzün bağlantı hızı (`/sys/class/net/*/speed`) da okunmuyor: saniyede bir
+yapılan ve hiç gösterilmeyen bir okumaydı. Kartta yalnızca gösterilen alanlar
+toplanır; yeni bir alan eklenirse karta da eklenmelidir.
 """
 
 import fcntl
@@ -90,5 +93,4 @@ def oku(d, ayar):
         "toplam_in": rx, "toplam_out": tx,
         "ip": _ip(arayuz),
         "tur": tur,
-        "hiz": ortak.oku_sayi(f"/sys/class/net/{arayuz}/speed", 0),
     }
