@@ -450,6 +450,24 @@ def _servis_sirala(birimler):
                                            b.get("etiket", "")))
 
 
+def _liste_yerlesimi(ust, alt, adet):
+    """Liste kartları için (satır yüksekliği, sığan satır sayısı).
+
+    Liste taşıyorsa altta **"+N daha"** satırına yer ayrılır: aksi hâlde o yazı
+    son satırın üstüne biniyordu (Raspberry Pi 800×480 panelinde görüldü:
+    "Bluetooth" satırı ile "+7 servis daha" iç içe geçiyordu).
+    """
+    def hesapla(yer):
+        satir_h = max(24.0, min(40.0, yer / max(3, min(6, adet))))
+        return satir_h, max(1, int(yer // satir_h))
+
+    yer = max(20.0, alt - ust)
+    satir_h, sigar = hesapla(yer)
+    if adet > sigar:                      # "+N daha" yazılacak → yer ayır
+        satir_h, sigar = hesapla(max(20.0, yer - 18.0))
+    return satir_h, sigar
+
+
 def servisler(ck, x, y, w, h, v, g):
     d = v.get("servisler") or {}
     _baslik(ck, x, y, w, h, "SERVİSLER")
@@ -460,8 +478,7 @@ def servisler(ck, x, y, w, h, v, g):
         return _yok(ck, x, y, w, h, "servis bulunamadı")
 
     ust, alt = y + 34, y + h - 6
-    satir_h = max(24.0, min(40.0, (alt - ust) / max(3, min(6, len(birimler)))))
-    sigar = max(1, int((alt - ust) // satir_h))
+    satir_h, sigar = _liste_yerlesimi(ust, alt, len(birimler))
     simdi = time.time()
 
     for i, s in enumerate(birimler[:sigar]):
@@ -506,8 +523,7 @@ def loglar(ck, x, y, w, h, v, g):
         return _yok(ck, x, y, w, h, "günlük dosyası bulunamadı")
 
     ust, alt = y + 34, y + h - 6
-    satir_h = max(22.0, min(34.0, (alt - ust) / max(3, min(6, len(kaynaklar)))))
-    sigar = max(1, int((alt - ust) // satir_h))
+    satir_h, sigar = _liste_yerlesimi(ust, alt, len(kaynaklar))
     simdi = time.time()
 
     for i, k in enumerate(kaynaklar[:sigar]):

@@ -95,6 +95,47 @@ def _kontrol(kok):
     return hatalar
 
 
+def test_liste_kartlarinda_daha_yazisi_cakismaz():
+    """"+N daha" satırı son satırın (ya da kart kenarının) üstüne binmemeli.
+
+    Raspberry Pi panelinde görüldü: kısa bir SERVİSLER kartında "+7 servis
+    daha" yazısı "Bluetooth" satırının üzerine biniyordu.
+    """
+    import tkinter as tk
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+        hatalar = []
+        for kid in ("servisler", "loglar"):
+            for (w, h) in BOYUTLAR:
+                c.delete("all")
+                kartlar.CIZIM[kid](cekim, 10, 10, w, h, ORNEK, GECMIS)
+                metinler = [(c.bbox(o), c.itemcget(o, "text"))
+                            for o in c.find_all()
+                            if c.type(o) == "text"]
+                daha = [(b, t) for b, t in metinler if "daha" in t]
+                if not daha:
+                    continue
+                for (db, dt) in daha:
+                    for (ob, ot) in metinler:
+                        if ot is dt or not ot.strip():
+                            continue
+                        # dikdörtgenler kesişiyor mu?
+                        if (db[0] < ob[2] and ob[0] < db[2]
+                                and db[1] < ob[3] and ob[1] < db[3]):
+                            hatalar.append((kid, w, h, dt, ot))
+        assert not hatalar, "liste kartlarında çakışma:\n" + "\n".join(
+            f"  {k} {w}x{h}: {a!r} ↔ {b!r}" for k, w, h, a, b in hatalar[:20])
+    finally:
+        kok.destroy()
+
+
 def test_kartlar_tasmaz():
     import tkinter as tk
     try:

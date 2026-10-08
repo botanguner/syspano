@@ -208,6 +208,9 @@ else
   echo "        python3 -m syspano --surum"
 fi
 
-echo "Yeniden başlatın:"
-echo "    systemctl --user restart syspano   # servis olarak çalışıyorsa"
-echo "    ya da panoyu kapatıp yeniden açın"
+echo "Yeniden başlatın (Python kodu bellekte kalır):"
+if systemctl --user list-unit-files syspano.service --no-legend 2>/dev/null | grep -q "syspano.service"; then
+  echo "    systemctl --user restart syspano"
+else
+  echo "    panoda: ⚙ → Panoyu yeniden başlat"
+fi
