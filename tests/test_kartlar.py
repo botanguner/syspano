@@ -73,7 +73,9 @@ GECMIS = {k: [float((i * 7) % 100) for i in range(60)]
           for k in ("cpu", "bellek", "sicaklik", "pil", "gpu", "dgpu", "ag_in", "ag_out")}
 
 BOYUTLAR = [(360, 84), (360, 120), (360, 175), (360, 260), (360, 360),
-            (240, 84), (240, 150), (600, 200), (600, 400), (200, 90)]
+            (240, 84), (240, 150), (600, 200), (600, 400), (200, 90),
+            # Raspberry Pi'nin 1 sütunlu düzeninde kartlar kısa kalıyor
+            (533, 72), (360, 66)]
 
 
 def _kontrol(kok):
@@ -93,6 +95,37 @@ def _kontrol(kok):
                 if bx1 > x + w + 2 or by1 > y + h + 2 or bx0 < x - 2 or by0 < y - 2:
                     hatalar.append((kid, w, h, c.type(oge), (bx0, by0, bx1, by1)))
     return hatalar
+
+
+def test_hicbir_kart_bos_kalmaz():
+    """Her kart, veri varken çizilecek bir şey bulmalı.
+
+    Kısa kartta boş kalan kart, ekranda yalnızca başlık gösterip yer kaplar
+    (Raspberry Pi'nin 1 sütunlu düzeninde GEÇMİŞ kartı böyle boş kalıyordu).
+    """
+    import tkinter as tk
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+        bos = []
+        for kid, fonk in kartlar.CIZIM.items():
+            for (w, h) in BOYUTLAR:
+                c.delete("all")
+                fonk(cekim, 10, 10, w, h, ORNEK, GECMIS)
+                # kart zemini + başlık = 2 öğe; en az bir içerik öğesi olmalı
+                n = len(c.find_all())
+                if n < 3:
+                    bos.append((kid, w, h, n))
+        assert not bos, "boş kalan kartlar (öğe sayısı):\n" + "\n".join(
+            f"  {k} {w}x{h}: {n} öğe" for k, w, h, n in bos)
+    finally:
+        kok.destroy()
 
 
 def test_liste_kartlarinda_daha_yazisi_cakismaz():

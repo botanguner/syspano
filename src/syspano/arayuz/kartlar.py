@@ -208,13 +208,19 @@ def cekirdek(ck, x, y, w, h, v, g):
 # ─── geçmiş ──────────────────────────────────────────────────────────────────
 def gecmis(ck, x, y, w, h, v, g):
     _baslik(ck, x, y, w, h, "GEÇMİŞ (son 4 dakika)")
-    ust = y + 30
-    alt = y + h - 34
-    if alt - ust < 20:
-        return
+    # Açıklama satırı (CPU/BELLEK/SICAKLIK) yalnızca yer varsa çizilir; eğriler
+    # her zaman çizilir. Aksi hâlde küçük kartta (ör. Raspberry Pi'de 1 sütunlu
+    # düzende) kart tamamen boş kalıyordu.
+    aciklama = 22 if h >= 96 else 0
+    ust = y + 28
+    alt = y + h - 6 - aciklama
+    if alt - ust < 12:
+        return _yok(ck, x, y, w, h, "yer yok")
     for anahtar, renk in (("cpu", ck.renk["mavi"]), ("bellek", ck.renk["mor"]),
                           ("sicaklik", ck.renk["sari"])):
         ck.sparkline(x + 14, ust, w - 28, alt - ust, list(g[anahtar]), renk, 100, dolgu=False)
+    if not aciklama:
+        return
     for i, (etiket, renk) in enumerate((("CPU", ck.renk["mavi"]),
                                         ("BELLEK", ck.renk["mor"]),
                                         ("SICAKLIK", ck.renk["sari"]))):
@@ -238,12 +244,15 @@ def gpu(ck, x, y, w, h, v, g):
     yy = y + 34
     gosterilecek = kartlar[:1 if h < 200 else 2]
     for k in gosterilecek:
-        if yy + 26 > alt:
+        # Çok kısa kartta bile en azından model yazılsın (boş kart kalmasın)
+        if yy + 14 > alt:
             break
         kullanim = k.get("kullanim")
         renk = ck.renk["yesil"] if (kullanim or 0) < 70 else ck.renk["sari"]
         ck.yazi(x + 16, yy, k.get("model", k.get("ad", "GPU"))[:22], 10.5, ck.renk["soluk"])
         yy += 18
+        if yy + 14 > alt:
+            break
         ck.yazi(x + 16, yy, (f"%{kullanim:.0f}" if kullanim is not None else "—"),
                 17, renk, True)
         ayrinti = []
@@ -503,7 +512,7 @@ def servisler(ck, x, y, w, h, v, g):
         ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, durum == "failed", "e")
         TIKLANABILIR.append((("log", s.get("ad")), (x + 2, sy, w - 4, satir_h)))
 
-    if len(birimler) > sigar:
+    if len(birimler) > sigar and y + h - 12 >= ust + sigar * satir_h + 10:
         ck.yazi(x + 34, y + h - 12, f"+{len(birimler) - sigar} servis daha", 10,
                 ck.renk["cok_soluk"])
 
@@ -541,7 +550,7 @@ def loglar(ck, x, y, w, h, v, g):
         ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, False, "e")
         TIKLANABILIR.append((("log_dosya", k.get("yol")), (x + 2, sy, w - 4, satir_h)))
 
-    if len(kaynaklar) > sigar:
+    if len(kaynaklar) > sigar and y + h - 12 >= ust + sigar * satir_h + 10:
         ck.yazi(x + 34, y + h - 12, f"+{len(kaynaklar) - sigar} günlük daha", 10,
                 ck.renk["cok_soluk"])
 
