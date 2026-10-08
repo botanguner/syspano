@@ -91,6 +91,14 @@ def _olustur_ayristirici():
                    help="journald hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk)")
     p.add_argument("--cek", nargs="?", const="", default=None, metavar="DOSYA",
                    help="ekran/panonun PNG kaydını al ve çık (varsayılan: ~/Pictures)")
+    p.add_argument("--bekci", action="store_true",
+                   help="pano bekçisi: panoyu yoksa başlatır, donmuşsa yeniden başlatır")
+    p.add_argument("--bekci-aralik", type=float, default=None, metavar="SN",
+                   help="bekçinin kontrol aralığı (varsayılan 20 sn)")
+    p.add_argument("--bekci-esik", type=float, default=None, metavar="SN",
+                   help="kalp atışı bu süre bayatlarsa pano donmuş sayılır (varsayılan 90 sn)")
+    p.add_argument("--bekci-kuru", action="store_true",
+                   help="bekçi yalnızca kararını yazsın, hiçbir şeyi başlatıp öldürmesin")
     p.add_argument("--log-satir", type=int, default=200, metavar="N",
                    help="--log ile gösterilecek satır sayısı (varsayılan 200)")
     p.add_argument("--guncelle", action="store_true",
@@ -229,6 +237,21 @@ def _servisleri_listele():
     return 0
 
 
+def _bekci_calistir(aralik=None, esik=None, kuru=False):
+    from . import bekci
+    print(f"SysPano bekçisi · aralık {aralik or bekci.VARSAYILAN_ARALIK:.0f} sn · "
+          f"eşik {esik or bekci.VARSAYILAN_ESIK:.0f} sn · "
+          f"günlük {bekci.gunluk_yolu()}", flush=True)
+    if kuru:
+        return 0 if bekci.dongu(aralik, esik, kuru=True, tur_sayisi=1) in (
+            "bekle", "baslat", "oldur") else 1
+    try:
+        bekci.dongu(aralik, esik)
+    except KeyboardInterrupt:
+        return 0
+    return 0
+
+
 def _cek_calistir(yol=None):
     from . import goruntu
     ok, mesaj = goruntu.cek(yol or None)
@@ -358,6 +381,9 @@ def main(argv=None):
 
     if args.servisler:
         return _servisleri_listele()
+
+    if args.bekci or args.bekci_kuru:
+        return _bekci_calistir(args.bekci_aralik, args.bekci_esik, args.bekci_kuru)
 
     if args.cek is not None:
         return _cek_calistir(args.cek)

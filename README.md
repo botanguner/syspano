@@ -150,6 +150,9 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--log-hata` | `--log`/`--log-dosya` çıktısında yalnızca hata ve uyarı satırları |
 | `--log-pencere DK` | journald kaynaklarında hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk) |
 | `--cek [DOSYA]` | Ekranın/panonun PNG kaydını al ve çık (varsayılan `~/Pictures/syspano-<tarih>.png`) |
+| `--bekci` | **Pano bekçisi**: panoyu yoksa başlatır, kalp atışı bayatlarsa (donma) yeniden başlatır |
+| `--bekci-aralik SN` / `--bekci-esik SN` | Bekçinin kontrol aralığı (20 sn) / donma eşiği (90 sn) |
+| `--bekci-kuru` | Bekçi kararını yalnızca yazsın; hiçbir şeyi başlatıp öldürmesin |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -518,7 +521,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **17 dosyada 158 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **18 dosyada 165 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -606,6 +609,45 @@ echo cek > "${XDG_RUNTIME_DIR:-/tmp}/syspano/komut"     # pano görüntüyü al�
 > Raspberry Pi'de (labwc/Wayland) `grim` genelde kuruludur; değilse
 > `sudo apt install grim`. ImageMagick `import` bilerek kullanılmaz: X11'de
 > pencere seçimi için etkileşimli bekleyip otomasyonu kilitleyebiliyor.
+
+## Bekçi (gözetimsiz panolar)
+
+Duvar panosu / kiosk gibi **elle müdahale edilmeyen** kurulumlarda pano donabilir
+(ekran kımıldamaz, süreç yaşıyordur) ya da çökebilir. Bekçi bunu kendiliğinden
+toparlar:
+
+```bash
+syspano --bekci                    # aralık 20 sn, donma eşiği 90 sn
+syspano --bekci --bekci-esik 45    # daha sabırsız
+syspano --bekci-kuru               # yalnız kararını yazsın (deneme)
+```
+
+1. **Pano yoksa başlatır.** Açılışta Xwayland/Tk hazır değilse pano ölebilir;
+   bekçi her turda yeniden dener, yani yarış koşullarına dayanır.
+2. **Kalp atışı bayatlarsa öldürür.** Pano 3 saniyede bir
+   `$XDG_RUNTIME_DIR/syspano/durum.json` yazar; bu dosyanın yaşı eşiği geçtiyse
+   pano donmuş sayılır, `SIGTERM` (gerekirse `SIGKILL`) ile kapatılır ve bir
+   sonraki turda yeniden başlatılır.
+3. **Öldürmeden önce tanı kaydı yazar** — süreç durumu (`State:`), beklediği
+   çekirdek fonksiyonu (`wchan`) ve kalp yaşı — böylece donma sonradan
+   incelenebilir. Günlük: `~/.local/state/syspano/pano.log`.
+
+Raspberry Pi'de oturum açılışına eklemek için `~/.config/labwc/autostart`:
+
+```bash
+/home/botan/.local/bin/syspano --bekci &
+```
+
+> [!TIP]
+> Bekçi, XDG autostart (`.desktop`) yarışına takılan panolar için de çözümdür:
+> pano ne zaman ölürse ölsün en fazla `--bekci-aralik` saniye sonra geri gelir.
+
+## Bekçi ve ekran görüntüsü durum dosyaları
+
+| Yol | İçerik |
+|---|---|
+| `${XDG_RUNTIME_DIR}/syspano/durum.json` | Kalp atışı ve tepsi iletişimi (pano 3 sn'de bir yazar) |
+| `~/.local/state/syspano/pano.log` | Pano çıktısı + bekçinin karar/tanı satırları |
 
 ## Servisler ve günlükler
 
@@ -726,7 +768,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 158 test / 17 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 165 test / 18 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

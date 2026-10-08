@@ -3,6 +3,32 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.8.0] — 2026-10-08
+
+### Eklendi
+- **Pano bekçisi: `syspano --bekci`.** Gözetimsiz çalışan panolar (Raspberry Pi
+  kiosk) için kendiliğinden toparlanma:
+  - panoyu **yoksa başlatır** (açılışta Xwayland/Tk hazır değilse pano ölebilir;
+    bekçi her turda yeniden dener, yani yarış koşullarına dayanır),
+  - panonun **kalp atışı** (`$XDG_RUNTIME_DIR/syspano/durum.json`, pano
+    3 saniyede bir yazar) `--bekci-esik` (varsayılan 90 sn) bayatlarsa panoyu
+    **donmuş** sayıp `SIGTERM` → gerekirse `SIGKILL` ile kapatır; bir sonraki
+    turda yeniden başlatır,
+  - öldürmeden önce **tanı kaydı** yazar (süreç durumu, `wchan`, kalp yaşı) —
+    donma sonradan incelenebilsin. Günlük: `~/.local/state/syspano/pano.log`.
+  - `--bekci-aralik` (20 sn) ve `--bekci-kuru` (yalnız kararını yazar) seçenekleri.
+  - Raspberry Pi'de `~/.config/labwc/autostart` yerine `~/.config/labwc/autostart`
+    içine tek satır yeterlidir: `syspano --bekci &`.
+    (Bu iş, kullanıcının "ekran dondu, fişi çekmek zorunda kaldım" bildirimi
+    üzerine eklendi: artık donan pano kendini toparlar.)
+- 7 yeni test (toplam **18 dosyada 165 test**): karar mantığı (başlat/öldür/bekle),
+  kalp yaşı ve eşik davranışı, süreç tanıma (bekçi ve tepsi pano sayılmaz),
+  günlük yazımı, kuru çalıştırma, zararsız bir süreci sonlandırma, tanı metni.
+
+### Not
+- `durum.json` kalp atışı zaten tepsi iletişimi için yazılıyordu; bekçi onu
+  yeniden kullanır (ek maliyet yok, pano tarafında değişiklik gerekmedi).
+
 ## [1.7.1] — 2026-10-08
 
 ### Düzeltildi
