@@ -123,18 +123,18 @@ command -v labwc >/dev/null 2>&1 && LABWC_VAR=1
 [ -n "${XDG_CURRENT_DESKTOP:-}" ] && case "$XDG_CURRENT_DESKTOP" in *labwc*|*LXDE*) LABWC_VAR=1 ;; esac
 
 if [ "$LABWC_VAR" = "1" ]; then
-  if [ "$KURU" = "1" ]; then
+  VAR_MI=0
+  [ -f "$LABWC_AUTOSTART" ] && grep -q -- "--bekci" "$LABWC_AUTOSTART" && VAR_MI=1
+  if [ "$VAR_MI" = "1" ]; then
+    ok "bekçi satırı zaten var: $LABWC_AUTOSTART"
+  elif [ "$KURU" = "1" ]; then
     echo "    (kuru) $LABWC_AUTOSTART içine eklenecek: $SATIR"
   else
     mkdir -p "$(dirname "$LABWC_AUTOSTART")"
     touch "$LABWC_AUTOSTART"
-    if grep -q -- "--bekci" "$LABWC_AUTOSTART"; then
-      ok "bekçi satırı zaten var: $LABWC_AUTOSTART"
-    else
-      cp "$LABWC_AUTOSTART" "$LABWC_AUTOSTART.bak-$SURUM"
-      printf '%s\n' "$SATIR" >> "$LABWC_AUTOSTART"
-      ok "eklendi: $LABWC_AUTOSTART → $SATIR"
-    fi
+    cp "$LABWC_AUTOSTART" "$LABWC_AUTOSTART.bak-$SURUM"
+    printf '%s\n' "$SATIR" >> "$LABWC_AUTOSTART"
+    ok "eklendi: $LABWC_AUTOSTART → $SATIR"
   fi
   # çift başlatmayı önle
   if [ -f "$XDG_AUTOSTART" ] && grep -q "^Hidden=false" "$XDG_AUTOSTART"; then
