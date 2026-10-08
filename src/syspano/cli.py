@@ -80,6 +80,12 @@ def _olustur_ayristirici():
                    help="izlenen systemd servislerini ve durumlarını listele ve çık")
     p.add_argument("--log", metavar="BIRIM",
                    help="bir servisin günlüğünü yazdır (ör. --log apache2)")
+    p.add_argument("--log-kaynaklar", action="store_true",
+                   help="bulunan günlük dosyalarını listele (Apache, PHP, Laravel…)")
+    p.add_argument("--log-dosya", metavar="YOL",
+                   help="bir günlük dosyasının sonunu yazdır (--log-satir ile satır sayısı)")
+    p.add_argument("--log-hata", action="store_true",
+                   help="--log/--log-dosya çıktısında yalnızca hata ve uyarı satırları")
     p.add_argument("--log-satir", type=int, default=200, metavar="N",
                    help="--log ile gösterilecek satır sayısı (varsayılan 200)")
     p.add_argument("--guncelle", action="store_true",
@@ -202,7 +208,8 @@ def _servisleri_listele():
     return 0
 
 
-def _log_yazdir(birim, satir):
+def _log_yazdir(birim, satir, yalniz_hata=False):
+    from .cihaz import loglar as L
     from .cihaz import servisler as S
     if not S.systemd_var():
         print("systemd bulunamadı.", file=sys.stderr)
@@ -210,9 +217,64 @@ def _log_yazdir(birim, satir):
     ad = _birim_adi(birim)
     ayar = ayar_modul.oku()
     metin, kaynak = S.gunluk(ad, max(1, satir), ayar)
-    print(f"# {ad} · kaynak: {kaynak}")
-    print(metin)
+    ozet = L.ozet(metin)
+    print(f"# {ad} · kaynak: {kaynak} · {ozet['hata']} hata · {ozet['uyari']} uyarı")
+    print(L.suz(metin, yalniz_hata))
     return 0
+
+
+def _log_dosya_yazdir(yol, satir, yalniz_hata=False):
+    from .cihaz import loglar as L
+    metin, kaynak = L.gunluk(yol, max(1, satir))
+    ozet = L.ozet(metin)
+    print(f"# {os.path.expanduser(yol)} · kaynak: {kaynak} · "
+          f"{ozet['hata']} hata · {ozet['uyari']} uyarı")
+    print(L.suz(metin, yalniz_hata))
+    return 0
+
+
+def _log_kaynaklari_listele(satir=200):
+    """Bulunan günlük dosyalarını, son satırlarındaki hata/uyarı sayısıyla listeler."""
+    import time
+
+    from .cihaz import loglar as L
+    from .cihaz.ortak import kuyruk
+
+    ayar = ayar_modul.oku()
+    kaynaklar = L.bul(L.desenler(ayar))
+    if not kaynaklar:
+        print("günlük dosyası bulunamadı.")
+        print("Kendi dosyalarınızı ekleyin (~/.config/syspano/config.json):")
+        print('  "log_dosyalari": ["~/projelerim/*/storage/logs/*.log"]')
+        return 0
+
+    print(f"{'günlük':<22} {'son yazılma':<12} {'boyut':>8} {'hata':>5} {'uyarı':>6}  yol")
+    print("-" * 100)
+    simdi = time.time()
+    for k in kaynaklar:
+        if not k["okunabilir"]:
+            print(f"{k['etiket']:<22} {'izin yok':<12} {'—':>8} {'—':>5} {'—':>6}  {k['yol']}")
+            continue
+        ozet = L.ozet(kuyruk(k["yol"], max(1, satir)))
+        yas = _yas_metni(simdi - k["son"]) if k["son"] else "—"
+        print(f"{k['etiket']:<22} {yas:<12} {_boyut(k['boyut']):>8} "
+              f"{ozet['hata']:>5} {ozet['uyari']:>6}  {k['yol']}")
+    print(f"\n{len(kaynaklar)} günlük · içeriği için: syspano --log-dosya YOL")
+    return 0
+
+
+def _yas_metni(sn):
+    from .cihaz.ortak import sure_metni
+    return sure_metni(sn)
+
+
+def _boyut(bayt):
+    b = float(bayt or 0)
+    for birim in ("B", "KB", "MB", "GB"):
+        if b < 1024:
+            return f"{b:.0f}{birim}"
+        b /= 1024
+    return f"{b:.0f}TB"
 
 
 def main(argv=None):
@@ -231,8 +293,14 @@ def main(argv=None):
     if args.servisler:
         return _servisleri_listele()
 
+    if args.log_kaynaklar:
+        return _log_kaynaklari_listele(args.log_satir)
+
+    if args.log_dosya:
+        return _log_dosya_yazdir(args.log_dosya, args.log_satir, args.log_hata)
+
     if args.log:
-        return _log_yazdir(args.log, args.log_satir)
+        return _log_yazdir(args.log, args.log_satir, args.log_hata)
 
     if args.liste_ekranlar:
         print(ekran_modul.liste_metni())

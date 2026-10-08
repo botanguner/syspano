@@ -12,7 +12,7 @@ from syspano.demo import ORNEK_SISTEM, DemoToplayici
 
 # Kartların beklediği anahtarlar (arayüz bunları okur)
 BEKLENEN = {"sistem", "cpu", "bellek", "sicaklik", "pil", "gpu",
-            "disk", "ag", "surecler", "guc", "yedek"}
+            "disk", "ag", "surecler", "servisler", "loglar", "guc", "yedek"}
 
 
 def _veri():
@@ -51,6 +51,8 @@ def test_kartlarin_okudugu_alanlar():
     for ad in ("arayuz", "ip", "inen", "giden", "tur"):
         assert ad in v["ag"], f"ag.{ad} yok"
     assert v["surecler"]["liste"] and len(v["surecler"]["liste"][0]) == 3
+    for ad in ("etiket", "yol", "boyut", "son", "okunabilir", "grup"):
+        assert ad in v["loglar"]["kaynaklar"][0], f"loglar.{ad} yok"
     assert "pl1" in v["guc"] and "governor" in v["guc"]
 
 
