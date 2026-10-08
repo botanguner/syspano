@@ -28,6 +28,34 @@ def _pano_olustur(**ek):
     return p
 
 
+def _veri_bekle(pano, sn=4.0):
+    """İlk veri örneği gelene kadar bekle.
+
+    Toplayıcı ilk örneği üretmeden pano hiçbir kare çizmez (`if not v: return`),
+    bu yüzden çizime bağlı iddialar veri gelmeden kurulmamalı.
+    """
+    son = time.monotonic() + sn
+    while time.monotonic() < son:
+        if pano.t.al():
+            return True
+        pano.kok.update()
+        time.sleep(0.05)
+    return bool(pano.t.al())
+
+
+def _metinler(pano, aranan=None, sn=2.0):
+    """Canvas'taki yazıları döndürür; `aranan` verilirse görünene kadar bekler."""
+    son = time.monotonic() + sn
+    while True:
+        pano.ciz()
+        pano.kok.update()
+        metinler = [pano.c.itemcget(o, "text") for o in pano.c.find_all()
+                    if pano.c.type(o) == "text"]
+        if aranan is None or aranan in metinler or time.monotonic() > son:
+            return metinler
+        time.sleep(0.05)
+
+
 def _bekle(pano, sn=1.4):
     son = time.monotonic() + sn
     while time.monotonic() < son:
@@ -412,6 +440,7 @@ def test_gunluk_karti_ve_dosya_goruntuleyici():
     yol = None
     try:
         _bekle(p, 1.2)
+        assert _veri_bekle(p), "toplayıcı veri üretmedi"
         p.ciz()
         p.kok.update()
         v = p.t.al()
@@ -522,15 +551,12 @@ def test_gunluk_goruntuleyici_journal_kaynagi():
         "2026-10-08 21:00:00 mariadb[1]: hazır\n"
         "2026-10-08 21:01:00 mariadb[1]: ERROR: tablo bozuk\n", "journalctl")
     try:
+        assert _veri_bekle(p), "toplayıcı veri üretmedi"
         p.log_ac_journal("mariadb.service", "MariaDB")
-        _bekle(p, 0.6)
-        p.ciz()
-        p.kok.update()
         assert p.gorunum == "log" and p.log_tip == "journal"
         assert len(p._log_satirlar()) == 2, p._log_satirlar()
         assert p.log_ozet["hata"] == 1, p.log_ozet
-        metinler = [p.c.itemcget(o, "text") for o in p.c.find_all()
-                    if p.c.type(o) == "text"]
+        metinler = _metinler(p, "MariaDB")
         assert "MariaDB" in metinler, "okunur ad başlıkta yok"
         assert any("mariadb.service" in m for m in metinler), "birim adı yok"
         p.gorunum_degistir("pano")
