@@ -3,6 +3,23 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.4.2] — 2026-10-08
+
+### Düzeltildi
+- **Liste kartlarında "+N daha" yazısı son satırın üstüne biniyordu.** Kısa bir
+  SERVİSLER kartında son satır ile "+7 servis daha" iç içe geçiyordu (Raspberry
+  Pi 800×480 panelinde görüldü: "Bluetooth" yazısının üzerine biniyordu).
+  Artık liste taşıyorsa alttaki "+N daha" satırı için **yer ayrılıyor**; satır
+  yüksekliği ve sığan satır sayısı buna göre hesaplanıyor
+  (`kartlar._liste_yerlesimi`, SERVİSLER ve GÜNLÜKLER kartları paylaşıyor).
+  Yeni test, "daha" yazısının başka bir metinle kesişmesini denetliyor (eski
+  kodda 4 çakışma yakalıyor).
+- **`guncelle.sh` her durumda `systemctl --user restart syspano` öneriyordu.**
+  Panonun systemd kullanıcı servisi olmadığı makinelerde (ör. Raspberry Pi'de
+  oturum açılışında `.desktop` ile başlıyor) bu komut hata veriyordu. Artık
+  yönerge ortama göre: servis varsa `systemctl --user restart syspano`, yoksa
+  **"panoda: ⚙ → Panoyu yeniden başlat"**.
+
 ## [1.4.1] — 2026-10-08
 
 ### Düzeltildi
