@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Belgeler (wiki)
+    url: https://github.com/botanguner/syspano/wiki
+    about: Kurulum, kullanım, ayarlar, kartlar ve sorun giderme
+  - name: Güvenlik açığı bildir
+    url: https://github.com/botanguner/syspano/security/advisories/new
+    about: Lütfen güvenlik sorunlarını herkese açık issue olarak açmayın
+  - name: Sürüm notları
+    url: https://github.com/botanguner/syspano/blob/main/CHANGELOG.md
+    about: Sürümler arasında ne değişti

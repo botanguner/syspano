@@ -1,0 +1,24 @@
+# Dependabot yapılandırması
+#
+# SysPano'nun **çalışma zamanı bağımlılığı yoktur** (yalnızca Python 3 + tkinter),
+# bu yüzden bağımlılık güncellemesi gerekmez. Güncellenmesi gereken tek şey
+# iş akışlarında kullanılan GitHub Actions sürümleridir.
+#
+# Dependabot **güvenlik** uyarıları ve güvenlik güncellemeleri depo ayarlarından
+# yönetilir (Security → Dependabot).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "bağımlılıklar"
+    groups:
+      actions:
+        patterns:
+          - "*"

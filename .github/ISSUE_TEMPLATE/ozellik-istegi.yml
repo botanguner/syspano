@@ -1,0 +1,49 @@
+name: Özellik isteği
+description: Yeni bir kart, ayar veya davranış önerisi
+title: "[Özellik] "
+labels: ["özellik"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Öneriniz için teşekkürler. SysPano'nun iki temel kısıtı var:
+        **harici Python bağımlılığı yok** ve **veriler yalnızca `/proc`, `/sys`
+        ve ekran araçlarından** okunur. Önerinizin bu sınırlara uyup uymadığını
+        belirtirseniz değerlendirmek kolaylaşır.
+
+  - type: textarea
+    id: sorun
+    attributes:
+      label: Hangi sorunu çözer?
+      description: Eksik olan ne, hangi durumda zorlanıyorsunuz?
+    validations:
+      required: true
+
+  - type: textarea
+    id: oneri
+    attributes:
+      label: Öneriniz
+      description: Nasıl görünmeli / çalışmalı? Ekran görüntüsü veya taslak ekleyebilirsiniz
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cihaz
+    attributes:
+      label: Hangi cihazda gerekli?
+      options:
+        - Masaüstü / dizüstü
+        - Raspberry Pi veya benzeri
+        - İkincil küçük ekran
+        - Hepsi
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: kontrol
+    attributes:
+      label: Uygunluk
+      options:
+        - label: Harici Python bağımlılığı gerektirmiyor
+        - label: Veriler `/proc`, `/sys` veya ekran araçlarından okunabilir
+        - label: Dokunmatik ekranda kullanılabilir olmalı
