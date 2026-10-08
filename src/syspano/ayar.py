@@ -19,7 +19,7 @@ VARSAYILAN = {
     "olcek": None,
     "tema": "koyu",
     "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek", "gecmis",
-                "gpu", "disk_ag", "surecler", "yedek", "sistem"],
+                "gpu", "disk_ag", "servisler", "surecler", "yedek", "sistem"],
     # true | false | "auto": auto → yalnızca faresinin olduğu, yeterince geniş
     # ekranlarda açılır (dokunmatik panellerde kendiliğinden kapalı).
     "buyutec": "auto",
@@ -28,6 +28,12 @@ VARSAYILAN = {
     "terminal_yazi": None,      # None → ölçeğe göre; px cinsinden sayı → sabit
     "tepsi": True,
     "guncelleme_ms": 1000,
+    # systemd servisleri: ek olarak izlenecek birimler (ör. ["apache2", "mysql"])
+    "servisler": [],
+    # birim → log dosyası (ör. {"apache2": "/var/log/apache2/error.log"})
+    "servis_log_dosyalari": {},
+    "servis_aralik": 30,        # saniye; servis durumu bu aralıkta okunur (düşürülebilir)
+    "servis_log_satir": 200,    # günlük görüntüleyicide gösterilecek satır
     "uygulama_basligi": "SysPano",
     "saydam_olmayan": True,
 }

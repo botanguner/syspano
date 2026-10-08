@@ -25,6 +25,7 @@ KART_BILGI = {
     "gpu":      {"baslik": "GPU",                 "sutun": 1, "yuk": 1.45, "oncelik": 66},
     "disk_ag":  {"baslik": "DİSK / AĞ",           "sutun": 1, "yuk": 1.45, "oncelik": 76},
     "surecler": {"baslik": "SÜREÇLER",            "sutun": 1, "yuk": 1.45, "oncelik": 55},
+    "servisler": {"baslik": "SERVİSLER",          "sutun": 1, "yuk": 1.45, "oncelik": 85},
     "yedek":    {"baslik": "YEDEK",               "sutun": 1, "yuk": 1.45, "oncelik": 40},
     "sistem":   {"baslik": "SİSTEM",              "sutun": 1, "yuk": 0.90, "oncelik": 30},
 }

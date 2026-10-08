@@ -33,6 +33,7 @@ tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub
 | **GPU** | Intel (RC6), AMD (`gpu_busy_percent`), NVIDIA (`nvidia-smi`) ve Raspberry Pi VideoCore |
 | **DİSK / AĞ** | Kök disk okuma/yazma, doluluk, ağ arayüzü, IP, ↓/↑ hızı |
 | **SÜREÇLER** | En çok CPU kullanan süreçler |
+| **SERVİSLER** | systemd servislerinin durumu (Apache, MySQL, nginx, Docker…); **dokununca günlüğü açılır** |
 | **YEDEK** | *(isteğe bağlı)* gdrive-yedek durumu: son yedek, dosya sayısı, boyut, sıradaki çalışma |
 | **SİSTEM** | Ana makine adı, dağıtım, çekirdek, mimari, çalışma süresi, oturum |
 
@@ -140,6 +141,8 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--test [SANIYE]` | Test modu: belirtilen süre sonra kapanır |
 | `--liste-ekranlar` | Bağlı ekranları listele ve çık |
 | `--kartlari-listele` | Kullanılabilir kartları listele ve çık |
+| `--servisler` | İzlenen systemd servislerini ve durumlarını listele |
+| `--log BIRIM` | Bir servisin günlüğünü yazdır (`--log apache2`, `--log-satir 500`) |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -302,7 +305,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "olcek": null,
   "tema": "koyu",
   "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek",
-              "gecmis", "gpu", "disk_ag", "surecler", "yedek", "sistem"],
+              "gecmis", "gpu", "disk_ag", "servisler", "surecler", "yedek", "sistem"],
   "buyutec": "auto",
   "terminal": true,
   "terminal_yazi": null,
@@ -310,7 +313,11 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "guncelleme_ms": 1000,
   "guncelleme_denetimi": true,
   "yedek_durum_yolu": "~/.local/state/gdrive-yedek/durum.json",
-  "yedek_zamanlayici": "yedek.timer"
+  "yedek_zamanlayici": "yedek.timer",
+  "servisler": [],
+  "servis_log_dosyalari": {},
+  "servis_aralik": 30,
+  "servis_log_satir": 200
 }
 ```
 
@@ -459,6 +466,7 @@ flowchart TD
 PYTHONPATH=src python3 tests/test_yerlesim.py    # yerleşim (Tk gerekmez)
 PYTHONPATH=src python3 tests/test_kartlar.py     # kart taşması denetimi
 PYTHONPATH=src python3 tests/test_cihaz.py       # gerçek donanım okuma
+PYTHONPATH=src python3 tests/test_servisler.py   # servis durumu ve günlük
 PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 ```
 
@@ -469,13 +477,15 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | `test_geometri.py` | Büyüteç kırpma matematikleri (çokgen ve parça kırpma) |
 | `test_ekran.py` | `xrandr` ayrıştırma, DPI hesabı, hedef ekran seçimi |
 | `test_cihaz.py` | Toplayıcılar gerçek donanımda çökmeden veri üretiyor mu; **seyreltme ve önbellekler** (süreç taraması 3 sn, yavaş sensör, sensör haritası, GPU kart listesi, `which`) |
+| `test_servisler.py` | `systemctl show`/`list-units` ayrıştırma, **takma ad çözümü** (mysqld → mariadb), `∞` bellek değeri, log dosyası kuyruğu, önbellek |
+| `test_demo.py` | Demo verisi bu makineden iz taşımıyor ve kartların beklediği şekle uyuyor |
 | `test_ortam.py` | Fare/dokunmatik ayrımı (girdi aygıtları) ve büyüteç kararı |
 | `test_ayar.py` | Yapılandırma; varsayılanların dosyaya düşmemesi |
 | `test_ayar_ekrani.py` | Ayar ekranı yerleşimi: çakışma yok, dokunma hedefleri yeterli, çizim ölçeğe uyuyor, isabet denetimi |
 | `test_guncelleme.py` | Sürüm karşılaştırma, kurulum kaydı ve **gerçek git senaryosuyla** güncelleme |
-| `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi, ayar ekranında dokunma; **kare öğeleri birikmiyor**, çizim döngüsü çoğalmıyor, gizliyken çizilmiyor |
+| `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi, ayar ekranında dokunma, **servis kartı ve günlük görünümü**; kare öğeleri birikmiyor, çizim döngüsü çoğalmıyor, gizliyken çizilmiyor |
 
-Toplam **10 dosyada 79 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **12 dosyada 98 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -540,6 +550,85 @@ python3 arac/olcum.py --hizli     # modülleri art arda (seyreltme görünmez)
 > [!NOTE]
 > Mutlak süreler cihaza göre değişir: Raspberry Pi 4, bu dizüstünden yaklaşık
 > 3–4 kat yavaştır, ama oranlar aynıdır ve seyreltme mantığı orada da geçerlidir.
+
+## Servisler ve günlükler
+
+Sunucu makinelerde Apache, MySQL/MariaDB, PostgreSQL, nginx, Docker gibi
+servislerin çalışıp çalışmadığını gösterir ve **günlüklerine panodan erişim**
+sağlar. systemd yoksa kart kendiliğinden gizlenir.
+
+| Nerede | Ne |
+|---|---|
+| **SERVİSLER kartı** | Her satırda renkli durum noktası (yeşil çalışıyor · gri kapalı · kırmızı bozuk), ad, çalışma süresi ve bellek. Bozuklar en üstte |
+| **Günlük görüntüleyici** | Bir satıra **dokununca** açılır: son 200 satır (`journalctl` ya da tanımlı log dosyası), parmakla kaydırma, `⟳ Yenile` düğmesi, açıkken 8 saniyede bir kendiliğinden tazeleme |
+| **Komut satırı** | `syspano --servisler` ve `syspano --log apache2 --log-satir 500` (SSH'de de çalışır) |
+
+**Hangi servisler izlenir?** Yaygın sunucu servisleri (apache2, httpd, nginx,
+mysql, mysqld, mariadb, postgresql, docker, podman, redis, php-fpm, named,
+postfix, smbd, cups, sshd…) **kurulu olanlar**, ayrıca **başarısız (failed)**
+birimler ve `config.json`'da `"servisler"` ile ekledikleriniz. systemd takma
+adları asıl ada çevrilir (ör. `mysqld.service` → `mariadb.service`).
+
+Kendi log dosyalarını gösteren servisler için (Apache'nin
+`/var/log/apache2/error.log`'u gibi) yapılandırmada yol verin:
+
+```json
+{
+  "servisler": ["apache2", "mysql"],
+  "servis_log_dosyalari": {
+    "apache2": "/var/log/apache2/error.log",
+    "mysql": "/var/log/mysql/error.log"
+  }
+}
+```
+
+> [!NOTE]
+> **Maliyet ölçülerek ayarlandı:** tüm birimleri listelemek ~100 ms sürdüğü için
+> keşif yalnızca açılışta ve 10 dakikada bir yapılır; durum ise tek
+> `systemctl show` çağrısıyla **30 saniyede bir** okunur (~90 ms; 10 saniyede
+> bir sormak 8,7 ms/sn, 30 saniyede bir 2,9 ms/sn ediyor). Günlük yalnızca
+> görüntüleyici açıkken okunur. `servis_aralik` ile sıklığı değiştirebilirsiniz.
+
+> [!TIP]
+> `/var/log` altındaki bazı dosyalar yalnızca root ya da `adm`/`systemd-journal`
+> grubuna okunabilir. Pano root olarak çalışmadığı için o dosyaları okuyamazsa
+> `journalctl` çıktısına düşer; tam erişim isterseniz kullanıcıyı gruba ekleyin.
+
+## Teknolojiler
+
+| Katman | Kullanılan |
+|---|---|
+| Dil | **Python 3.9+** (test edilen: 3.9–3.14) |
+| Arayüz | **tkinter** (Canvas) — harici bağımlılık yok, dağıtımın `python3-tk` paketiyle gelir |
+| Veri kaynakları | `/proc`, `/sys` (sysfs), `xrandr` / `kscreen-doctor` / `wlr-randr` / `swaymsg`, `systemctl` / `journalctl`, `nvidia-smi`, `vcgencmd` |
+| Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
+| Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
+| Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 98 test / 12 dosya |
+| CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
+| Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
+
+### Geliştirmede yapay zekâ desteği
+
+Bu proje **bir yapay zekâ ajanıyla (OpenGhost) birlikte** geliştirildi: kod
+yazımı, hata ayıklama, ölçüm, test ve belgelerin büyük bölümü ajanla birlikte
+üretildi; mimari kararlar ve cihaz üzerindeki doğrulamalar kullanıcı tarafından
+yönlendirildi.
+
+Ajanın katkısı ölçülebilir adımlarla ilerledi:
+
+| Adım | Örnek |
+|---|---|
+| Ölç, sonra iyileştir | `arac/olcum.py` yazıldı; NVMe sıcaklığının tek başına 9,25 ms sürdüğü görülüp seyreltildi (sıcaklık modülü 9,9 → 0,6 ms) |
+| Profilleyiciyle kök neden | Çizim karesinin %80'inin Tk'nin "sil-sonra-çiz" bedeli olduğu bulundu; çiz-sonra-sil yöntemiyle kare 20,6 → 3,6 ms |
+| Gerçek cihazda doğrulama | Raspberry Pi 4 + 7" dokunmatik ekranda test; dondurucu hata (çizim döngüsü çoğalması) ve dokunmatikte takılı kalan büyüteç bu şekilde yakalandı |
+| Regresyon testi | Bulunan her hata için test yazıldı (`test_kartlar.py`, `test_demo.py`, `test_servisler.py` …) |
+| Sır sızıntısını önleme | Kişisel bilgi içeren ekran görüntüleri için `--demo` modu ve veri denetleyen test eklendi |
+
+> [!IMPORTANT]
+> Yapay zekâ desteğiyle üretilen her değişiklik **çalıştırılarak** doğrulandı:
+> testler, gerçek donanımda ölçümler ve ekran görüntüleri. Belgelerdeki sayılar
+> tahmin değil, ölçüm çıktısıdır.
 
 ## Katkı ve iş akışı
 

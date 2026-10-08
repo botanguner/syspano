@@ -8,13 +8,14 @@ import os
 import time
 
 from syspano import ortam
+from syspano.arayuz import kartlar as kartlar_modul
 
 
 def _pano_olustur(**ek):
     import tkinter as tk
     from syspano.arayuz.pano import Pano
     ayar = {"pencere": [900, 560], "kartlar": ["cpu", "bellek", "sicaklik", "pil",
-                                              "cekirdek", "disk_ag", "surecler"],
+                                              "cekirdek", "disk_ag", "servisler", "surecler"],
             "buyutec": True, "guncelleme_ms": 400, "tepsi": False}
     ayar.update(ek)
     try:
@@ -350,6 +351,54 @@ def test_surukleyerek_kaydirma():
         assert p.kaydir <= p._max_kaydir
         sonra = _bekleyen_zamanlayici(p)
         assert sonra <= once + 1, f"sürükleme zamanlayıcı biriktirdi: {once} → {sonra}"
+    finally:
+        p.kapat()
+
+
+def test_servis_karti_ve_gunluk():
+    """Servis satırları tıklanabilir olmalı; günlük başlığı şeride binmemeli."""
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        _bekle(p, 3.5)                       # servis keşfi ilk çağrıda yapılır
+        v = p.t.al()
+        s = v.get("servisler") or {}
+        if s.get("yok") or not s.get("birimler"):
+            print("    (systemd/servis yok — atlandı)")
+            return
+        p.ciz()
+        p.kok.update()
+        assert kartlar_modul.TIKLANABILIR, "servis satırları tıklanabilir değil"
+        eylem, _kutu = kartlar_modul.TIKLANABILIR[0]
+        assert eylem[0] == "log", f"beklenmeyen eylem: {eylem}"
+
+        p.log_ac(eylem[1])
+        p.ciz()
+        p.kok.update()
+        assert p.gorunum == "log", "günlük görünümü açılmadı"
+        assert p.log_metin is not None
+
+        S = p.S
+        serit = 46 * S
+        for oge in p.c.find_all():
+            if p.c.type(oge) != "text":
+                continue
+            metin = p.c.itemcget(oge, "text")
+            if metin in ("⟳ Yenile", str(p.log_birim)):
+                ust = p.c.bbox(oge)[1]
+                assert ust >= serit - 2, f"'{metin}' üst şeridin üstüne biniyor (y={ust})"
+        # günlük satırları başlığın altında başlamalı
+        merkezler = sorted((p.c.bbox(o)[1] + p.c.bbox(o)[3]) / 2
+                           for o in p.c.find_all()
+                           if p.c.type(o) == "text"
+                           and p.c.itemcget(o, "text")[:1].isdigit())
+        if merkezler:
+            assert merkezler[0] >= p.LOG_UST * S - 2, \
+                f"günlük satırları başlığın altına taşmıyor (ilk {merkezler[0]:.0f})"
+        # panoya dönüş
+        p.gorunum_degistir("pano")
+        assert p.gorunum == "pano"
     finally:
         p.kapat()
 

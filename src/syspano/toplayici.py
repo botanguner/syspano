@@ -46,6 +46,11 @@ class Toplayici:
         self.surec_sonuc = {}
         self.surec_son = 0.0
         self.sicaklik_haritasi = None
+        # systemd servisleri
+        self.servis_birimler = None
+        self.servis_kesif = 0.0
+        self.servis_son = 0.0
+        self.servis_sonuc = {}
         self.yedek_zaman = 0.0
         self.yedek_sonraki = ""
         self.sistem_arandi = False
