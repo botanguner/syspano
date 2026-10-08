@@ -403,6 +403,54 @@ def test_servis_karti_ve_gunluk():
         p.kapat()
 
 
+def test_gunluk_karti_ve_dosya_goruntuleyici():
+    """GÜNLÜKLER kartı dosya satırları tıklanabilir olmalı; süzgeç çalışmalı."""
+    import tempfile
+    p = _pano_olustur(kartlar=["cpu", "bellek", "servisler", "loglar"])
+    if p is None:
+        return
+    yol = None
+    try:
+        _bekle(p, 1.2)
+        p.ciz()
+        p.kok.update()
+        v = p.t.al()
+        d = v.get("loglar") or {}
+        if not d.get("yok") and d.get("kaynaklar"):
+            eylemler = [e[0] for e in kartlar_modul.TIKLANABILIR]
+            assert ("log_dosya", d["kaynaklar"][0]["yol"]) in eylemler, eylemler
+
+        # geçici bir günlük dosyasını görüntüleyicide aç
+        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False,
+                                         encoding="utf-8") as f:
+            f.write("2026-10-08 21:31:00 bilgi: sunucu başladı\n")
+            f.write("2026-10-08 21:31:01 production.ERROR: bağlantı kurulamadı\n")
+            f.write("2026-10-08 21:31:02 PHP Warning: Undefined variable $x\n")
+            yol = f.name
+        p.log_ac_dosya(yol)
+        _bekle(p, 0.6)                       # çizim döngüsü birkaç kare çizsin
+        p.ciz()
+        p.kok.update()
+        assert p.gorunum == "log", "dosya günlüğü açılmadı"
+        assert p.log_tip == "dosya"
+        assert len(p._log_satirlar()) == 3, p._log_satirlar()
+        assert p.log_ozet["hata"] == 1 and p.log_ozet["uyari"] == 1, p.log_ozet
+        assert any(e[0][0] == "log_suz" for e in kartlar_modul.TIKLANABILIR), \
+            f"süzgeç düğmesi yok: {[e[0] for e in kartlar_modul.TIKLANABILIR]}"
+
+        p.log_suz = True
+        satirlar = p._log_satirlar()
+        assert len(satirlar) == 2, f"süzgeç süzmedi: {satirlar}"
+        assert all(("ERROR" in s or "Warning" in s) for s in satirlar)
+        p.log_suz = False
+        assert len(p._log_satirlar()) == 3
+        p.gorunum_degistir("pano")
+    finally:
+        if yol:
+            os.unlink(yol)
+        p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback

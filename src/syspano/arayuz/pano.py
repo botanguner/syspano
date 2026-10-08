@@ -21,6 +21,7 @@ from collections import deque
 
 from .. import ayar as ayar_modul
 from .. import ortam
+from ..cihaz import loglar as loglar_modul
 from ..cihaz import servisler as servis_modul
 from ..toplayici import Toplayici
 from ..yerlestir import Yerlestirici
@@ -28,6 +29,12 @@ from . import ayar_ekrani
 from . import kartlar as kartlar_modul
 from . import tema
 from . import yerlesim
+
+
+def _kirp_yol(yol, azami=46):
+    """Uzun yolu baştan kısaltır: '…/storage/logs/laravel.log'."""
+    yol = str(yol)
+    return yol if len(yol) <= azami else "…" + yol[-(azami - 1):]
 from .cekim import Cekim
 from .terminal import Terminal
 
@@ -83,6 +90,9 @@ class Pano:
             self.gorunum = ayarlar["baslangic_gorunumu"]
         # günlük görüntüleyici
         self.log_birim = None
+        self.log_tip = "birim"                # "birim" (systemd) | "dosya" (log dosyası)
+        self.log_ozet = {"hata": 0, "uyari": 0}
+        self.log_suz = False                  # yalnızca hata/uyarı satırları
         self.log_metin = ""
         self.log_kaynak = ""
         self.log_zaman = 0.0
@@ -214,6 +224,8 @@ class Pano:
             if k == "yedek" and (v.get("yedek") or {}).get("yok"):
                 continue
             if k == "servisler" and (v.get("servisler") or {}).get("yok"):
+                continue
+            if k == "loglar" and (v.get("loglar") or {}).get("yok"):
                 continue
             if k == "sicaklik" and not (v.get("sicaklik") or {}).get("sensor_var"):
                 continue
@@ -412,6 +424,17 @@ class Pano:
         if not birim:
             return
         self.log_birim = birim
+        self.log_tip = "birim"
+        self.log_sonuna = True
+        self.log_yenile(ilk=True)
+        self.gorunum_degistir("log")
+
+    def log_ac_dosya(self, yol):
+        """Bir günlük dosyasını açar (GÜNLÜKLER kartındaki satıra dokununca)."""
+        if not yol:
+            return
+        self.log_birim = os.path.expanduser(str(yol))
+        self.log_tip = "dosya"
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -421,36 +444,52 @@ class Pano:
             return
         satir = int(self.ayarlar.get("servis_log_satir") or 200)
         try:
-            metin, kaynak = servis_modul.gunluk(self.log_birim, satir, self.ayarlar)
+            if self.log_tip == "dosya":
+                metin, kaynak = loglar_modul.gunluk(self.log_birim, satir)
+            else:
+                metin, kaynak = servis_modul.gunluk(self.log_birim, satir, self.ayarlar)
         except Exception as hata:
             metin, kaynak = f"(günlük okunamadı: {hata})", "hata"
         self.log_metin = metin
         self.log_kaynak = kaynak
+        self.log_ozet = loglar_modul.ozet(metin)
         self.log_zaman = time.monotonic()
         if ilk:
             self.log_sonuna = True
 
     def _log_satirlar(self):
-        return self.log_metin.splitlines() if self.log_metin else []
+        return loglar_modul.suz(self.log_metin, self.log_suz).splitlines()
 
     def _log_icerik_y(self):
         return self.LOG_UST + len(self._log_satirlar()) * self.LOG_SATIR_Y + 24
 
     def _log_baslik_ciz(self):
-        """Sabit başlık: servis adı, kaynak, yenile düğmesi (kaydırmaz)."""
+        """Sabit başlık: kaynak adı, özet, süzgeç ve yenile düğmesi (kaydırmaz)."""
         c, R = self.cek, self.R
         x0 = 14.0
         yb = self.LOG_BASLIK_Y
-        c.yazi(x0, yb, str(self.log_birim), 12, R["mavi"], True)
+        baslik = os.path.basename(self.log_birim) if self.log_tip == "dosya" else str(self.log_birim)
+        c.yazi(x0, yb, baslik, 12, R["mavi"], True)
         yas = int(time.monotonic() - self.log_zaman) if self.log_zaman else 0
-        c.yazi(x0 + self._metin_gen(self.log_birim, 12, True) + 14, yb,
-               f"{self.log_kaynak} · {yas} sn önce · kaydırarak gezinin",
-               10, R["cok_soluk"])
+        ozet = self.log_ozet or {}
+        ayrinti = (f"{self.log_kaynak} · {yas} sn önce")
+        if ozet.get("hata") or ozet.get("uyari"):
+            ayrinti += f" · {ozet.get('hata', 0)} hata · {ozet.get('uyari', 0)} uyarı"
+        if self.log_tip == "dosya":
+            ayrinti = _kirp_yol(self.log_birim, 46) + " · " + ayrinti
+        c.yazi(x0 + self._metin_gen(baslik, 12, True) + 14, yb, ayrinti, 10, R["cok_soluk"])
+        # süzgeç düğmesi + yenile
         dug = (self.tasarim_g - 14 - 92, yb - 14, 92, 28)
         c.dik(dug[0], dug[1], dug[0] + dug[2], dug[1] + dug[3], R["dugme"], R["kenar"])
         c.yazi(dug[0] + dug[2] / 2, dug[1] + dug[3] / 2 + 1, "⟳ Yenile", 11,
                R["yazi"], True, "center")
         kartlar_modul.TIKLANABILIR.append((("yenile", None), dug))
+        suz = (dug[0] - 8 - 116, yb - 14, 116, 28)
+        c.dik(suz[0], suz[1], suz[0] + suz[2], suz[1] + suz[3], R["dugme"], R["kenar"])
+        c.yazi(suz[0] + suz[2] / 2, suz[1] + suz[3] / 2 + 1,
+               ("Yalnız hata" if not self.log_suz else "Tümü"), 11,
+               R["sari"] if self.log_suz else R["soluk"], True, "center")
+        kartlar_modul.TIKLANABILIR.append((("log_suz", None), suz))
 
     def _log_satirlari_ciz(self):
         """Kaydırılan günlük satırları (yalnızca görünenler çizilir)."""
@@ -911,6 +950,9 @@ class Pano:
                 if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
                     if eylem[0] == "yenile":
                         self.log_yenile()
+                    elif eylem[0] == "log_suz":
+                        self.log_suz = not self.log_suz
+                        self.kaydir = 0.0
                     self.ciz()
                     return
             return
@@ -921,6 +963,8 @@ class Pano:
                 if qx <= dx <= qx + qw and qy <= dy <= qy + qh:
                     if eylem[0] == "log":
                         self.log_ac(eylem[1])
+                    elif eylem[0] == "log_dosya":
+                        self.log_ac_dosya(eylem[1])
                     return
         if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
             self.terminal_baslat()

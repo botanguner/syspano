@@ -34,6 +34,7 @@ tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub
 | **DİSK / AĞ** | Kök disk okuma/yazma, doluluk, ağ arayüzü, IP, ↓/↑ hızı |
 | **SÜREÇLER** | En çok CPU kullanan süreçler |
 | **SERVİSLER** | systemd servislerinin durumu (Apache, MySQL, nginx, Docker…); **dokununca günlüğü açılır** |
+| **GÜNLÜKLER** | Geliştirici günlükleri: **PHP/PHP-FPM**, Apache, nginx, Laravel/Symfony/WordPress, MySQL/MariaDB, PostgreSQL, Redis, MongoDB, PM2, Caddy, Jenkins…; **dokununca son 200 satır** + "yalnız hata" süzgeci |
 | **YEDEK** | *(isteğe bağlı)* gdrive-yedek durumu: son yedek, dosya sayısı, boyut, sıradaki çalışma |
 | **SİSTEM** | Ana makine adı, dağıtım, çekirdek, mimari, çalışma süresi, oturum |
 
@@ -143,6 +144,9 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--kartlari-listele` | Kullanılabilir kartları listele ve çık |
 | `--servisler` | İzlenen systemd servislerini ve durumlarını listele |
 | `--log BIRIM` | Bir servisin günlüğünü yazdır (`--log apache2`, `--log-satir 500`) |
+| `--log-kaynaklar` | Bulunan günlük dosyalarını listele (Apache, PHP, Laravel…) — son satırlarındaki hata/uyarı sayısıyla |
+| `--log-dosya YOL` | Bir günlük dosyasının sonunu yazdır (`--log-dosya /var/log/php8.2-fpm.log`) |
+| `--log-hata` | `--log`/`--log-dosya` çıktısında yalnızca hata ve uyarı satırları |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -271,7 +275,7 @@ python3 -m pip install --user --upgrade git+https://github.com/botanguner/syspan
 | **Gömülü terminal** | açık/kapalı | sonraki açılışta |
 | **Tepsi simgesi** | açık/kapalı | **Yeniden başlatma gerekir** |
 | **Kartları otomatik gizle** | açık/kapalı | Canlı |
-| **Kartlar** | 11 kart için anahtar | Canlı |
+| **Kartlar** | 13 kart için anahtar | Canlı |
 | **Sürüm** | denetle / güncelle / yeniden başlat / sıfırla | — |
 
 ### Neden dokunmatik için uygun
@@ -305,7 +309,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "olcek": null,
   "tema": "koyu",
   "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek",
-              "gecmis", "gpu", "disk_ag", "servisler", "surecler", "yedek", "sistem"],
+              "gecmis", "gpu", "disk_ag", "servisler", "loglar", "surecler", "yedek", "sistem"],
   "buyutec": "auto",
   "terminal": true,
   "terminal_yazi": null,
@@ -317,6 +321,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "yedek_zamanlayici": "yedek.timer",
   "servisler": [],
   "servis_log_dosyalari": {},
+  "log_dosyalari": [],
   "servis_aralik": 30,
   "servis_log_satir": 200,
   "uygulama_basligi": "SysPano"
@@ -471,6 +476,7 @@ PYTHONPATH=src python3 tests/test_cihaz.py       # gerçek donanım okuma
 PYTHONPATH=src python3 tests/test_servisler.py   # servis durumu ve günlük
 PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 PYTHONPATH=src python3 tests/test_belgeler.py    # README/wiki kodla uyumlu mu
+PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk okuma
 ```
 
 | Test | Neyi denetler |
@@ -488,8 +494,9 @@ PYTHONPATH=src python3 tests/test_belgeler.py    # README/wiki kodla uyumlu mu
 | `test_guncelleme.py` | Sürüm karşılaştırma, kurulum kaydı ve **gerçek git senaryosuyla** güncelleme |
 | `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi, ayar ekranında dokunma, **servis kartı ve günlük görünümü**; kare öğeleri birikmiyor, çizim döngüsü çoğalmıyor, gizliyken çizilmiyor |
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
+| `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **13 dosyada 105 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **14 dosyada 123 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -598,6 +605,53 @@ Kendi log dosyalarını gösteren servisler için (Apache'nin
 > grubuna okunabilir. Pano root olarak çalışmadığı için o dosyaları okuyamazsa
 > `journalctl` çıktısına düşer; tam erişim isterseniz kullanıcıyı gruba ekleyin.
 
+### Günlük dosyaları (geliştirici günlükleri)
+
+**GÜNLÜKLER** kartı, sunucuda ve geliştirme makinesinde aranan günlük
+dosyalarını kendiliğinden bulur; bir satıra dokunmak son 200 satırı açar.
+Panonun geri kalanı gibi bu kart da **var olmayanı gizler**: hiç günlük
+bulunamazsa kart çizilmez, bulunmayan yollar sessizce elenir.
+
+| Grup | Aranan dosyalar |
+|---|---|
+| **PHP** | `/var/log/php*-fpm.log`, `php-fpm.log`, `php*-fpm-slow.log`, `/var/log/php/error.log`, `/var/log/php_errors.log` |
+| **Uygulama** | Laravel (`*/storage/logs/*.log`), Symfony (`*/var/log/*.log`), WordPress (`wp-content/debug.log`), PM2 (`~/.pm2/logs/*`), Gunicorn, Caddy |
+| **Apache / nginx** | `/var/log/apache2/error.log` · `access.log` (Debian/Pi), `/var/log/httpd/error_log` (Fedora/RHEL), `/var/log/nginx/error.log` · `access.log` |
+| **Veritabanı** | MySQL/MariaDB `error.log` ve yavaş sorgu günlüğü, PostgreSQL, Redis, MongoDB |
+| **Sunucu** | Jenkins, `syslog`, `messages`, `kern.log`, `auth.log`, paket yöneticisi günlükleri |
+
+Kendi dosyalarınızı `log_dosyalari` ile ekleyin (glob ve `~` desteklenir):
+
+```json
+{
+  "log_dosyalari": [
+    "~/projelerim/*/storage/logs/*.log",
+    "/srv/api/logs/error.log"
+  ]
+}
+```
+
+Kart satırları **gruba göre** (geliştiriciye en yakın grup önce), grup içinde
+**en son yazılan önce** sıralanır; her satırda son yazılma yaşı ve dosya boyutu
+görünür (90 saniyeden yeni olanlar yeşil). Görüntüleyici başlığı okunan
+satırların **hata ve uyarı sayısını** yazar; **Yalnız hata** düğmesi yalnızca
+hata/uyarı satırlarını bırakır — yüz binlerce satırlık bir Laravel günlüğünde
+kaybolmazsınız. Komut satırından da aynı günlükler:
+
+```bash
+syspano --log-kaynaklar                    # bulunan dosyalar + hata/uyarı sayısı
+syspano --log-dosya /var/log/php8.2-fpm.log --log-satir 500
+syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hatalar
+```
+
+> [!NOTE]
+> **Maliyet yine ölçüldü:** keşif (bilinen yolların `glob` + `stat`'ı) dizüstünde
+> **~1 ms**; açılışta ve **10 dakikada bir** yapılır. Boyut/yaş tazeleme
+> 5 saniyede bir (dosya başına ~0,005 ms). Dosya **içeriği** yalnızca
+> görüntüleyici açıkken okunur: 200 satır ≈ 0,14 ms, en fazla 512 KiB okunur
+> (tek satırlık dev bir günlük belleği şişirmesin). Kart hiçbir dosyanın
+> içeriğini okumaz — SD kartta her okuma pahalıdır.
+
 ## Teknolojiler
 
 | Katman | Kullanılan |
@@ -608,7 +662,7 @@ Kendi log dosyalarını gösteren servisler için (Apache'nin
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 105 test / 13 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 123 test / 14 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

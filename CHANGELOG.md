@@ -3,6 +3,50 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.4.0] — 2026-10-08
+
+### Eklendi
+- **GÜNLÜKLER kartı: geliştiricinin aradığı günlük dosyaları panoda.** Kart,
+  bilinen günlük dosyalarını kendiliğinden bulur, **gruba göre** (geliştiriciye
+  en yakın önce) ve grup içinde **en son yazılan önce** sıralar; her satırda son
+  yazılma yaşı ve boyut görünür (90 saniyeden yenisi yeşil), okunamayanlar
+  *izin yok* olarak işaretlenir. Bir satıra **dokununca son 200 satır** açılır.
+  - Aranan dosyalar: **PHP/PHP-FPM** (`php*-fpm.log`, `php_errors.log`, yavaş
+    günlük), **Laravel** (`storage/logs/*.log`), Symfony, WordPress, PM2,
+    Gunicorn, **Apache** (`apache2/error.log`, `httpd/error_log`), nginx, Caddy,
+    **MySQL/MariaDB**, PostgreSQL, Redis, MongoDB, Jenkins ve sistem günlükleri
+    (`syslog`, `messages`, `kern.log`, `auth.log`, paket yöneticisi).
+  - `log_dosyalari` ile kendi dosya/desenlerinizi ekleyebilirsiniz
+    (`"~/projelerim/*/storage/logs/*.log"` gibi; `~` ve glob desteklenir).
+- **Günlük görüntüleyicide hata/uyarı özeti ve `Yalnız hata` süzgeci.** Başlık
+  okunan satırların hata ve uyarı sayısını yazar; süzgeç yalnızca hata/uyarı
+  satırlarını bırakır (yüz binlerce satırlık Laravel günlüğünde gezinmek için).
+  Servis günlüklerinde de çalışır.
+- **Komut satırı:** `syspano --log-kaynaklar` (bulunan günlükler + son
+  satırlarındaki hata/uyarı sayısı), `syspano --log-dosya YOL`,
+  `syspano --log-hata` (yalnız hata/uyarı satırları). SSH'de de çalışır.
+- `cihaz/loglar.py`: keşif, önbellek, kuyruk okuma, özet ve süzgeç mantığı.
+- `ortak.kuyruk(yol, satir, azami_bayt)`: sondan geriye okuma artık **bayt
+  sınırlı** (en fazla 512 KiB) — tek satırlık dev bir günlük belleği şişirmez.
+- `tests/test_loglar.py` (**17 test**): glob/`~` genişletme, aynı dosyayı iki kez
+  saymama, izin denetimi, CRLF ve `\n`'siz son satır, bayt sınırı, hata/uyarı
+  özeti, süzgeç, keşif ve stat önbelleği.
+
+### Değişti
+- Günlük görüntüleyici artık **iki tür kaynağı** da açıyor: systemd birimi
+  (journalctl ya da tanımlı dosya) ve doğrudan **günlük dosyası**. Başlıkta
+  dosya yolu ve kaynak türü görünür.
+- `cihaz/servisler.py` içindeki kuyruk okuma `ortak.kuyruk`'a taşındı: tek
+  kaynak, tek davranış (mevcut `servisler.kuyruk` korunuyor).
+- Demo verisine SERVİSLER ve GÜNLÜKLER kartları eklendi (`syspano --demo`
+  artık bu iki kartı da dolu gösterir).
+
+### Ölçüm
+- Keşif (bilinen yolların `glob` + `stat`'ı): **~1,0 ms** → açılışta ve
+  10 dakikada bir. Boyut/yaş tazeleme: dosya başına **~0,005 ms** → 5 saniyede
+  bir. Kuyruk okuma (200 satır): **~0,14 ms** → yalnızca görüntüleyici açıkken.
+  Kart hiçbir dosyanın içeriğini okumaz.
+
 ## [1.3.3] — 2026-10-08
 
 ### Düzeltildi

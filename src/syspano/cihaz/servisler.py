@@ -197,21 +197,8 @@ def _durum_oku(birimler):
 
 # ─── günlük okuma ────────────────────────────────────────────────────────────
 def kuyruk(yol, satir=200):
-    """Dosyanın son `satir` satırını verimli biçimde okur (sondan geriye)."""
-    try:
-        with open(yol, "rb") as f:
-            f.seek(0, 2)
-            boyut = f.tell()
-            parca, adim = b"", 8192
-            while boyut > 0 and parca.count(b"\n") <= satir:
-                adim = min(adim, boyut)
-                boyut -= adim
-                f.seek(boyut)
-                parca = f.read(adim) + parca
-        satirlar = parca.decode("utf-8", "replace").splitlines()
-        return "\n".join(satirlar[-satir:])
-    except Exception as hata:
-        return f"(okunamadı: {hata})"
+    """Dosyanın son `satir` satırı (ortak.kuyruk ile aynı; bkz. `cihaz/ortak.py`)."""
+    return ortak.kuyruk(yol, satir)
 
 
 def gunluk(ad, satir=200, ayar=None):

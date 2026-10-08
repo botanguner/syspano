@@ -418,6 +418,30 @@ def bellek_kisa(bayt):
     return (f"{bayt / 1024:.0f} KB" if bayt < 1048576 else f"{bayt / 1048576:.0f} MB")
 
 
+def yas_kisa(sn):
+    """'şimdi', '12dk', '3sa', '2g' — günlüğün son yazılma yaşı."""
+    sn = max(0, int(sn))
+    if sn < 90:
+        return "şimdi"
+    if sn < 3600:
+        return f"{sn // 60}dk"
+    if sn < 86400:
+        return f"{sn // 3600}sa"
+    return f"{sn // 86400}g"
+
+
+def boyut_kisa(bayt):
+    """'512B', '12KB', '1.2MB', '3.4GB'."""
+    b = float(bayt or 0)
+    if b < 1024:
+        return f"{b:.0f}B"
+    for birim in ("KB", "MB", "GB"):
+        b /= 1024
+        if b < 1024:
+            return f"{b:.0f}{birim}" if b >= 10 else f"{b:.1f}{birim}"
+    return f"{b:.0f}TB"
+
+
 def _servis_sirala(birimler):
     """Önce bozuklar, sonra çalışanlar, sonra durmuşlar gelsin."""
     sira = {"failed": 0, "activating": 1, "active": 2, "reloading": 2,
@@ -467,6 +491,45 @@ def servisler(ck, x, y, w, h, v, g):
                 ck.renk["cok_soluk"])
 
 
+# ─── günlükler (geliştirici log dosyaları) ───────────────────────────────────
+# Grup → nokta rengi (tema anahtarı)
+GUNLUK_RENGI = {"php": "mor", "uygulama": "turkuaz", "apache": "sari",
+                "nginx": "yesil", "veritabani": "mavi", "sunucu": "cok_soluk",
+                "ozel": "mavi"}
+
+
+def loglar(ck, x, y, w, h, v, g):
+    d = v.get("loglar") or {}
+    _baslik(ck, x, y, w, h, "GÜNLÜKLER")
+    kaynaklar = d.get("kaynaklar") or []
+    if d.get("yok") or not kaynaklar:
+        return _yok(ck, x, y, w, h, "günlük dosyası bulunamadı")
+
+    ust, alt = y + 34, y + h - 6
+    satir_h = max(22.0, min(34.0, (alt - ust) / max(3, min(6, len(kaynaklar)))))
+    sigar = max(1, int((alt - ust) // satir_h))
+    simdi = time.time()
+
+    for i, k in enumerate(kaynaklar[:sigar]):
+        sy = ust + i * satir_h
+        cy = sy + satir_h / 2
+        ck.oval(x + 15, cy - 5, x + 25, cy + 5,
+                ck.renk[GUNLUK_RENGI.get(k.get("grup"), "soluk")])
+        ck.yazi(x + 34, cy, _kirp(ck, k.get("etiket", "?"), 11, w - 34 - 118),
+                11, ck.renk["yazi"])
+        if not k.get("okunabilir"):
+            ayrinti, arenk = "izin yok", ck.renk["kirmizi"]
+        else:
+            ayrinti = f"{yas_kisa(simdi - (k.get('son') or simdi))} · {boyut_kisa(k.get('boyut'))}"
+            arenk = ck.renk["yesil"] if simdi - (k.get("son") or 0) < 90 else ck.renk["soluk"]
+        ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, False, "e")
+        TIKLANABILIR.append((("log_dosya", k.get("yol")), (x + 2, sy, w - 4, satir_h)))
+
+    if len(kaynaklar) > sigar:
+        ck.yazi(x + 34, y + h - 12, f"+{len(kaynaklar) - sigar} günlük daha", 10,
+                ck.renk["cok_soluk"])
+
+
 # ─── sistem ──────────────────────────────────────────────────────────────────
 def sistem(ck, x, y, w, h, v, g):
     d = v.get("sistem") or {}
@@ -494,5 +557,6 @@ def sistem(ck, x, y, w, h, v, g):
 CIZIM = {
     "cpu": cpu, "bellek": bellek, "sicaklik": sicaklik, "pil": pil,
     "cekirdek": cekirdek, "gecmis": gecmis, "gpu": gpu, "disk_ag": disk_ag,
-    "surecler": surecler, "servisler": servisler, "yedek": yedek, "sistem": sistem,
+    "surecler": surecler, "servisler": servisler, "loglar": loglar,
+    "yedek": yedek, "sistem": sistem,
 }

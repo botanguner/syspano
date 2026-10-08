@@ -47,6 +47,31 @@ def sure_metni(sn):
     return f"{sa // 24} gün önce"
 
 
+def kuyruk(yol, satir=200, azami_bayt=512 * 1024):
+    """Dosyanın son `satir` satırını verimli biçimde okur (sondan geriye).
+
+    Dosyanın tamamı okunmaz: yalnızca gereken kadar bayt, en fazla
+    `azami_bayt`. Tek satırlık dev bir dosya (ya da SD karttaki büyük bir
+    günlük) bu yüzden belleği ve diski yormaz.
+    """
+    try:
+        with open(yol, "rb") as f:
+            f.seek(0, 2)
+            boyut = f.tell()
+            parca, adim = b"", 8192
+            while boyut > 0 and parca.count(b"\n") <= satir:
+                adim = min(adim, boyut, azami_bayt - len(parca))
+                if adim <= 0:
+                    break
+                boyut -= adim
+                f.seek(boyut)
+                parca = f.read(adim) + parca
+        satirlar = parca.decode("utf-8", "replace").splitlines()
+        return "\n".join(satirlar[-satir:])
+    except Exception as hata:
+        return f"(okunamadı: {hata})"
+
+
 def boyut_metni(bayt):
     """Baytı okunur biçime çevirir: '1.33 GiB'."""
     b = float(bayt or 0)

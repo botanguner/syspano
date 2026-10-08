@@ -51,6 +51,11 @@ class Toplayici:
         self.servis_kesif = 0.0
         self.servis_son = 0.0
         self.servis_sonuc = {}
+        # geliştirici günlükleri (dosya kaynakları)
+        self.log_kaynaklar = None
+        self.log_kesif = 0.0
+        self.log_son = 0.0
+        self.log_sonuc = {}
         self.yedek_zaman = 0.0
         self.yedek_sonraki = ""
         self.sistem_arandi = False
