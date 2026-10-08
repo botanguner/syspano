@@ -1,7 +1,7 @@
 """Cihaz toplayıcıları. Sıra, arayüzde kartların sırasını da belirler."""
 
-from . import (cpu, bellek, sicaklik, pil, gpu, disk, ag, surecler, servisler,
-               loglar, guc, yedek, sistem)
+from . import (cpu, bellek, sicaklik, pisaglik, pil, gpu, disk, ag, surecler,
+               servisler, loglar, guc, yedek, sistem)
 
 # (anahtar, modül) — Toplayici bunları sırayla çağırır
 TOPLAYICILAR = (
@@ -9,6 +9,7 @@ TOPLAYICILAR = (
     ("cpu", cpu),
     ("bellek", bellek),
     ("sicaklik", sicaklik),
+    ("pisaglik", pisaglik),
     ("pil", pil),
     ("gpu", gpu),
     ("disk", disk),

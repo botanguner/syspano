@@ -21,6 +21,9 @@ ORNEK = {
     "sicaklik": {"paket": 62.0, "cekirdek_maks": 65.0, "kaynak": "coretemp",
                  "fan": 2400.0, "ekstra": [("nvme", 40.0), ("pch", 45.0), ("wifi", 44.0)],
                  "sensor_var": True},
+    "pisaglik": {"yok": False, "ham": "0x50000", "mask": 327680, "simdi": [],
+                 "gecmis": [("undervoltage", "düşük voltaj")], "simdi_var": False,
+                 "gecmis_var": True, "normal": False, "gerilim": 0.87, "ghz": 1.5},
     "pil": {"yuzde": 78.0, "durum": "Discharging", "ac": False, "guc": 9.4,
             "saglik": 88.0, "kalan_dk": 210.0, "enerji": 30.0, "tam": 40.0},
     "gpu": {"kartlar": [{"ad": "card1", "model": "Örnek GPU", "kullanim": 33.0,
@@ -210,6 +213,68 @@ def test_kartlar_tasmaz():
         kok.destroy()
     assert not hatalar, "taşan kart öğeleri:\n" + "\n".join(
         f"  {k} {w}x{h}: {t} {b}" for k, w, h, t, b in hatalar[:40])
+
+
+def test_pi_sagligi_karti_durumlari():
+    """Pİ SAĞLIĞI kartı normal / geçmişte sorun / şu an sorun durumlarını yazmalı."""
+    import tkinter as tk
+    from syspano.cihaz import pisaglik as P
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+
+        def ciz(veri):
+            c.delete("all")
+            v = dict(ORNEK)
+            v["pisaglik"] = veri
+            kartlar.CIZIM["pisaglik"](cekim, 10, 10, 360, 120, v, GECMIS)
+            metinler = [c.itemcget(o, "text") for o in c.find_all()
+                        if c.type(o) == "text"]
+            for o in c.find_all():                     # kart içinde kalmalı
+                bx0, by0, bx1, by1 = c.bbox(o)
+                assert bx0 >= 8 and by0 >= 8 and bx1 <= 372 and by1 <= 132, \
+                    (c.type(o), c.bbox(o))
+            return metinler
+
+        ek = {"gerilim": 0.87, "ghz": 1.5}
+        normal = ciz({**P.ayristir(0), **ek})
+        assert any("Normal" in t for t in normal), normal
+        assert not any("⚠" in t for t in normal), normal
+
+        gecmis = ciz({**P.ayristir(1 << 18), **ek})
+        assert any("Şu an normal" in t for t in gecmis), gecmis
+        assert any("geçmişte" in t and "kısılıyor" in t for t in gecmis), gecmis
+
+        simdi = ciz({**P.ayristir(0x1), **ek})
+        assert any("⚠" in t and "DÜŞÜK VOLTAJ" in t for t in simdi), simdi
+        assert any("0x1" in t for t in simdi), simdi
+    finally:
+        kok.destroy()
+
+
+def test_pi_sagligi_karti_journal_eylemi_yok():
+    """Pİ SAĞLIĞI kartı tıklanabilir olmamalı (satırları eylem üretmez)."""
+    import tkinter as tk
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+        kartlar.TIKLANABILIR.clear()
+        kartlar.CIZIM["pisaglik"](cekim, 10, 10, 360, 120, ORNEK, GECMIS)
+        assert kartlar.TIKLANABILIR == [], kartlar.TIKLANABILIR
+    finally:
+        kok.destroy()
 
 
 if __name__ == "__main__":

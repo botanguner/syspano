@@ -29,6 +29,9 @@ class Toplayici:
         self.gpu_kart_zaman = 0.0
         self.vcgencmd_sonuc = None
         self.vcgencmd_zaman = 0.0
+        # Raspberry Pi sağlığı (throttle/voltaj)
+        self.pi_sonuc = None
+        self.pi_zaman = 0.0
         self.nvidia = None
         self.nvidia_zaman = 0.0
         self.nvidia_tepe = 0.0

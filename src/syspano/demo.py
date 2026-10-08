@@ -109,6 +109,11 @@ class DemoToplayici:
                 "ekstra": [("nvme", 40.0), ("pch", 45.0), ("wifi", 42.0)],
                 "sensor_var": True,
             },
+            "pisaglik": {
+                "yok": False, "ham": "0x50000", "mask": 327680, "simdi": [],
+                "gecmis": [("undervoltage", "düşük voltaj")], "simdi_var": False,
+                "gecmis_var": True, "normal": False, "gerilim": 0.87, "ghz": 1.5,
+            },
             "pil": {
                 "yuzde": pil_yuzde, "durum": "Discharging", "ac": False,
                 "guc": 9.4, "saglik": 88.0, "kalan_dk": pil_yuzde * 2.7,

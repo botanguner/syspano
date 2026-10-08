@@ -3,6 +3,33 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.7.0] — 2026-10-08
+
+### Eklendi
+- **Pİ SAĞLIĞI kartı (Raspberry Pi).** `vcgencmd get_throttled` bit maskesini
+  okur ve panoda gösterir:
+  - **Şu an**: düşük voltaj · frekans kısıtlı · kısılıyor · yazılımsal sıcaklık
+    sınırı (kırmızı `⚠` uyarısı),
+  - **Geçmişte** (önyüklemeden beri) görülenler sarı satırda: yetersiz
+    adaptör/kablo ya da yıpranmış SD kart böylece erken yakalanır,
+  - çekirdek voltajı (`measure_volts core`), ARM saati (`measure_clock arm`) ve
+    ham maskeyi (`0x50000` gibi) gösterir.
+  - `vcgencmd` yoksa (Pi değil) kart gizlenir. Üç `vcgencmd` çağrısı 5 saniyede
+    bir yapılır (süreç başlatmak ucuz değil).
+- **`syspano --cek [DOSYA]` — ekran görüntüsü.** Wayland'de `grim`, X11'de
+  `scrot` kullanır; varsayılan hedef `~/Pictures/syspano-<tarih>.png`.
+  Pano içinden de tetiklenebilir: tepsi iletişim dosyasına `cek` yazmak görüntüyü
+  alır ve bildirimle nereye kaydettiğini söyler (donanım düğmesi/SSH için).
+  ImageMagick `import` bilerek kullanılmaz — X11'de pencere seçimi için
+  etkileşimli bekleyip otomasyonu kilitleyebiliyor.
+- 14 yeni test (toplam **16 dosyada 155 test**): throttle bit çözümlemesi
+  (şimdi/geçmiş), voltaj-frekans ayrıştırma, `vcgencmd` önbelleği, kart
+  çizimleri (kırmızı uyarı dâhil) ve ekran görüntüsü aracı seçimi/kaydetme.
+
+### Ölçüm
+- Pi sağlığı: 5 saniyede bir 3 `vcgencmd` çağrısı (~10 ms/5 sn ≈ 2 ms/sn).
+- `--cek` pano içinden tetiklendiğinde çizim döngüsünü kilitlemez (grim ~0,1 sn).
+
 ## [1.6.0] — 2026-10-08
 
 ### Değişti

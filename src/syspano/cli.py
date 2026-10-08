@@ -89,6 +89,8 @@ def _olustur_ayristirici():
                    help="--log/--log-dosya çıktısında yalnızca hata ve uyarı satırları")
     p.add_argument("--log-pencere", type=int, default=None, metavar="DK",
                    help="journald hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk)")
+    p.add_argument("--cek", nargs="?", const="", default=None, metavar="DOSYA",
+                   help="ekran/panonun PNG kaydını al ve çık (varsayılan: ~/Pictures)")
     p.add_argument("--log-satir", type=int, default=200, metavar="N",
                    help="--log ile gösterilecek satır sayısı (varsayılan 200)")
     p.add_argument("--guncelle", action="store_true",
@@ -227,6 +229,13 @@ def _servisleri_listele():
     return 0
 
 
+def _cek_calistir(yol=None):
+    from . import goruntu
+    ok, mesaj = goruntu.cek(yol or None)
+    print(("✓ " if ok else "✗ ") + mesaj)
+    return 0 if ok else 1
+
+
 def _log_yazdir(birim, satir, yalniz_hata=False, pencere=None):
     from .cihaz import loglar as L
     from .cihaz import servisler as S
@@ -325,6 +334,9 @@ def main(argv=None):
 
     if args.servisler:
         return _servisleri_listele()
+
+    if args.cek is not None:
+        return _cek_calistir(args.cek)
 
     if args.log_kaynaklar:
         return _log_kaynaklari_listele(args.log_satir, args.log_pencere)

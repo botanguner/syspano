@@ -26,6 +26,7 @@ tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub
 |---|---|
 | **CPU** | Toplam kullanım, ortalama GHz, çekirdek sayısı, yük ortalaması, 4 dakikalık grafik |
 | **BELLEK** | Kullanılan/toplam GiB, takas (zram) kullanımı, grafik |
+| **Pİ SAĞLIĞI** | *(Raspberry Pi)* `vcgencmd get_throttled`: düşük voltaj / kısılma / sıcaklık sınırı — şu an ve önyüklemeden beri; çekirdek voltajı ve ARM saati |
 | **SICAKLIK / FAN** | İşlemci paketi °C, en sıcak çekirdek, fan RPM, NVMe/PCH/Wi-Fi sıcaklıkları |
 | **PİL** | Yüzde, durum (şarj/boşalma/fişte), güç (W), sağlık, kalan süre |
 | **ÇEKİRDEK KULLANIMI** | Her mantıksal çekirdeğin yüzdesi ve anlık frekansı |
@@ -148,6 +149,7 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--log-dosya YOL` | Bir günlük dosyasının sonunu yazdır (`--log-dosya /var/log/php8.2-fpm.log`) |
 | `--log-hata` | `--log`/`--log-dosya` çıktısında yalnızca hata ve uyarı satırları |
 | `--log-pencere DK` | journald kaynaklarında hata/uyarı sayımı için zaman penceresi (varsayılan 60 dk) |
+| `--cek [DOSYA]` | Ekranın/panonun PNG kaydını al ve çık (varsayılan `~/Pictures/syspano-<tarih>.png`) |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -515,7 +517,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **14 dosyada 141 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **16 dosyada 155 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -580,6 +582,29 @@ python3 arac/olcum.py --hizli     # modülleri art arda (seyreltme görünmez)
 > [!NOTE]
 > Mutlak süreler cihaza göre değişir: Raspberry Pi 4, bu dizüstünden yaklaşık
 > 3–4 kat yavaştır, ama oranlar aynıdır ve seyreltme mantığı orada da geçerlidir.
+
+## Ekran görüntüsü
+
+Panonun (ya da ekranın) PNG kaydını almak için:
+
+```bash
+syspano --cek                      # ~/Pictures/syspano-<tarih>.png
+syspano --cek /tmp/pano.png        # belirli dosya
+```
+
+Wayland oturumunda **grim**, X11'de **scrot** kullanılır (kurulu olmalı). Pano
+çalışırken de tetiklenebilir: tepsi iletişim dosyasına `cek` yazmak ekran
+görüntüsü alır ve nereye kaydedildiğini bildirim olarak gösterir — örneğin bir
+donanım düğmesine ya da SSH'den uzaktan bağlamak için:
+
+```bash
+echo cek > "${XDG_RUNTIME_DIR:-/tmp}/syspano/komut"     # pano görüntüyü alır
+```
+
+> [!NOTE]
+> Raspberry Pi'de (labwc/Wayland) `grim` genelde kuruludur; değilse
+> `sudo apt install grim`. ImageMagick `import` bilerek kullanılmaz: X11'de
+> pencere seçimi için etkileşimli bekleyip otomasyonu kilitleyebiliyor.
 
 ## Servisler ve günlükler
 
@@ -700,7 +725,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 141 test / 14 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 155 test / 16 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

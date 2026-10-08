@@ -18,9 +18,9 @@ VARSAYILAN = {
     # ölçek: None → DPI'dan hesaplanır; sayı → sabit katsayı (0.7 – 3.0)
     "olcek": None,
     "tema": "koyu",
-    "kartlar": ["cpu", "bellek", "sicaklik", "pil", "cekirdek", "gecmis",
-                "gpu", "disk_ag", "servisler", "loglar", "surecler", "yedek",
-                "sistem"],
+    "kartlar": ["cpu", "bellek", "sicaklik", "pisaglik", "pil", "cekirdek",
+                "gecmis", "gpu", "disk_ag", "servisler", "loglar", "surecler",
+                "yedek", "sistem"],
     # true | false | "auto": auto → yalnızca faresinin olduğu, yeterince geniş
     # ekranlarda açılır (dokunmatik panellerde kendiliğinden kapalı).
     "buyutec": "auto",
