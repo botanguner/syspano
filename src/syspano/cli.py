@@ -65,12 +65,20 @@ def _olustur_ayristirici():
     p.add_argument("--yonetilen", dest="yonetilen", action="store_true", default=None,
                    help="yöneticisiz pencere yerine normal pencere kullan")
     p.add_argument("--aralik", type=int, metavar="MS", help="güncelleme aralığı (ms)")
+    p.add_argument("--ayarlar", action="store_true",
+                   help="pano yerine ayar ekranıyla başla")
     p.add_argument("--test", nargs="?", const=10, type=int, metavar="SANIYE",
                    help="test modu: belirtilen süre sonra kapanır (varsayılan 10 sn)")
     p.add_argument("--liste-ekranlar", action="store_true",
                    help="bağlı ekranları listele ve çık")
     p.add_argument("--kartlari-listele", action="store_true",
                    help="kullanılabilir kartları listele ve çık")
+    p.add_argument("--guncelle", action="store_true",
+                   help="depoyu güncelle (git pull) ve paketi yeniden kur")
+    p.add_argument("--guncelle-denetle", action="store_true",
+                   help="yeni sürüm var mı denetle ve çık")
+    p.add_argument("--kurulum-bilgisi", action="store_true",
+                   help="kurulum kaydını ve durum dosyalarını göster")
     p.add_argument("--yapilandir", action="store_true",
                    help="varsayılan yapılandırma dosyasını oluştur ve yolunu yaz")
     p.add_argument("--varsayilan-yapilandirma", action="store_true",
@@ -87,12 +95,88 @@ def _pencere_olcusu(metin):
         raise SystemExit(f"--pencere biçimi geçersiz: {metin} (örn. 800x480)")
 
 
+# ─── güncelleme komutları ────────────────────────────────────────────────────
+def _guncelle_calistir():
+    from . import guncelleme
+    kayit = guncelleme.kayit_oku()
+    if not kayit:
+        print("Kurulum kaydı bulunamadı "
+              f"({guncelleme.kayit_yolu()}).\n"
+              "Elle güncelleme:\n"
+              "  Depo klonu varsa : cd <depo> && git pull && ./install.sh\n"
+              "  pip ile kurulduysa: python3 -m pip install --user --upgrade "
+              "<depo>")
+        return 1
+    print(f"Güncelleniyor… (kaynak: {kayit.get('kaynak')}, yöntem: {kayit.get('yontem')})")
+    sonuc = guncelleme.guncelle()
+    for ok, mesaj in sonuc["adimlar"]:
+        print(("  ✓ " if ok else "  ✗ ") + mesaj)
+    if sonuc["ok"]:
+        print("\nYeniden başlatın:")
+        print("  systemctl --user restart syspano   (servis olarak çalışıyorsa)")
+        print("  ya da panoyu kapatıp yeniden açın")
+        return 0
+    return 1
+
+
+def _denetle_calistir():
+    from . import guncelleme
+    kayit = guncelleme.kayit_oku()
+    print(f"yerel sürüm : {guncelleme.yerel_surum()}")
+    if kayit:
+        print(f"kurulum     : {kayit.get('yontem')} → {kayit.get('kaynak')}")
+    else:
+        print("kurulum     : kayıt yok (install.sh yazmamış)")
+    sonuc = guncelleme.denetle()
+    if sonuc.get("hata"):
+        print(f"durum       : denetlenemedi — {sonuc['hata']}")
+        return 1
+    if sonuc.get("yeni"):
+        ayrinti = []
+        if sonuc.get("uzak"):
+            ayrinti.append(f"uzak {sonuc['uzak']}")
+        if sonuc.get("geride"):
+            ayrinti.append(f"{sonuc['geride']} yeni commit")
+        print("durum       : YENİ SÜRÜM VAR — " + " · ".join(ayrinti))
+        if sonuc.get("mesaj"):
+            print(f"              son: {sonuc['mesaj']}")
+        print("              güncellemek için: syspano --guncelle")
+        return 0
+    print("durum       : güncel")
+    return 0
+
+
+def _kurulum_bilgisi():
+    from . import guncelleme
+    kayit = guncelleme.kayit_oku()
+    print(f"sürüm       : {guncelleme.yerel_surum()}")
+    print(f"python      : {sys.executable}")
+    if kayit:
+        for anahtar, deger in kayit.items():
+            print(f"{anahtar:<11} : {deger}")
+    else:
+        print("kurulum kaydı yok")
+    print(f"kayıt yolu  : {guncelleme.kayit_yolu()}")
+    print(f"denetim     : {guncelleme.denetim_yolu()} — {guncelleme.metin_ozet()}")
+    return 0
+
+
 def _liste(metin):
     return [k.strip() for k in (metin or "").replace(";", ",").split(",") if k.strip()]
 
 
 def main(argv=None):
     args = _olustur_ayristirici().parse_args(argv)
+
+    # ── görüntü gerektirmeyen komutlar (SSH'de de çalışır) ──
+    if args.guncelle:
+        return _guncelle_calistir()
+
+    if args.guncelle_denetle:
+        return _denetle_calistir()
+
+    if args.kurulum_bilgisi:
+        return _kurulum_bilgisi()
 
     if args.liste_ekranlar:
         print(ekran_modul.liste_metni())
@@ -155,6 +239,8 @@ def main(argv=None):
         ayarlar["mod"] = "pencere"
     elif args.tam_ekran:
         ayarlar["mod"] = "tam-ekran"
+    if args.ayarlar:
+        ayarlar["baslangic_gorunumu"] = "ayar"
     if args.test:
         ayarlar["test_suresi"] = args.test
 
@@ -183,7 +269,7 @@ def main(argv=None):
         mod = "pencere"
 
     from .arayuz.pano import Pano
-    pano = Pano(ayarlar, cikis=cikis, mod=mod)
+    pano = Pano(ayarlar, cikis=cikis, mod=mod, cikislar=cikislar)
 
     print(f"SysPano {__version__}\n"
           f"  ekran   : {cikis.ad if cikis else 'tüm ekran'} "

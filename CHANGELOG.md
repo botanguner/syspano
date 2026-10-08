@@ -3,6 +3,39 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.1.0] — 2026-10-08
+
+### Eklendi
+- **Ayar ekranı (pano üzerinden, dokunmatik dostu).** Üst şeritteki **⚙**
+  düğmesi ya da `syspano --ayarlar`. Kartların yerine aynı tuvalde çizilir;
+  değişiklikler anında uygulanır ve `config.json`'a yazılır. Ayarlanabilenler:
+  ölçek (kaydırıcı + −/+ + Oto), tema, büyüteç, güncelleme aralığı, hedef ekran,
+  gömülü terminal, tepsi simgesi, kartları otomatik gizleme, 11 kartın tek tek
+  açılıp kapanması, sürüm/güncelleme düğmeleri ve "varsayılana dön".
+  - Dokunmatik için: her denetim en az 46 tasarım birimi yüksekliğinde;
+    kaydırıcı çubuğunun görünen yüksekliği 8 birim ama dokunma alanı 46 birim;
+    yalnızca dokunma ve sürükleme kullanılır (hover/sağ tık yok).
+  - Yerleşim saf bir fonksiyon (`arayuz/ayar_ekrani.py:yerlesim`) olduğu için
+    7 farklı ekran boyutunda otomatik sınanır.
+- **Güncelleme stratejisi.** `guncelle.sh` (denetle / güncelle / `--zorla`),
+  `syspano --guncelle`, `--guncelle-denetle`, `--kurulum-bilgisi`.
+  `install.sh` artık bir **kurulum kaydı** yazar
+  (`~/.local/state/syspano/kurulum.json`); güncelleyici paketi aynı yöntemle
+  (pipx / pip --user / sistem) yeniden kurar. Yerel değişiklik varsa durur.
+- Panoda **sarı nokta**: yeni sürüm varsa ⚙ düğmesinde görünür. Denetim günde
+  bir kez arka planda, ağa çıkan iş ayrı bir süreçte yapılır.
+- Ayar ekranından güncelleme başlatma ve panoyu yeniden başlatma
+  (`os.execv`; aynı komut satırı seçenekleriyle).
+- `cekim.Cekim.oval()`: tasarım biriminde elips. Ham `create_oval` ölçeği
+  atlıyordu; anahtar ve kaydırıcı tutamağı yüksek DPI'lı panellerde yanlış yere
+  düşüyordu (Pi'de %40 kayma).
+
+### Düzeltildi
+- `ayar_ekrani`: dar düzende satır yüksekliği yanlış hesaplandığı için etiketler
+  denetimlerle çakışıyordu; kart anahtarlarının etiketleri hiç çizilmiyordu.
+- `ayar_ekrani`: kaydırıcı çubuğunun dokunma alanı 8 birimdi (parmakla
+  basılamıyordu); artık 46 birim, "Oto" düğmesi her zaman görünür.
+
 ## [1.0.1] — 2026-10-08
 
 ### Eklendi

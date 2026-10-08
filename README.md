@@ -131,6 +131,10 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--test [SANIYE]` | Test modu: belirtilen süre sonra kapanır |
 | `--liste-ekranlar` | Bağlı ekranları listele ve çık |
 | `--kartlari-listele` | Kullanılabilir kartları listele ve çık |
+| `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
+| `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
+| `--guncelle-denetle` | Yeni sürüm var mı denetle (ağa çıkar) |
+| `--kurulum-bilgisi` | Kurulum kaydını ve durum dosyalarını göster |
 | `--yapilandir` | Varsayılan yapılandırma dosyasını oluştur |
 | `--varsayilan-yapilandirma` | Varsayılanları ekrana yaz (dosyaya dokunmaz) |
 
@@ -138,10 +142,11 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 
 | Girdi | İşlev |
 |---|---|
-| ⌤ üst şeritteki düğmeler | Pano ↔ Terminal ↔ Kapat |
+| ⌤ üst şeritteki düğmeler | Pano ↔ Terminal ↔ **⚙ Ayarlar** ↔ Kapat |
 | Fare tekerleği / sürükleme | Panoyu dikey kaydır (içerik ekrana sığmıyorsa) |
 | `Ctrl +` / `Ctrl −` / `Ctrl 0` | Terminal yazı boyutu |
 | İmleci durdurmak | Büyüteç: imlecin altındaki bölge 2,6× büyür (yalnızca fare varsa) |
+| `Esc` | Ayar ekranından panoya dön |
 
 ### Büyüteç ve dokunmatik ekranlar
 
@@ -166,6 +171,101 @@ dokunmak/tıklamak da daireyi kapatır ve yeniden gerçek hareket beklenir.
 Uygulama açılışta hangi kararı verdiğini yazar: `büyüteç : kapalı (fare yok
 (dokunmatik ekran))`.
 
+## Güncelleme
+
+GitHub'dan klonlayıp kuranlar için iki yol var; ikisi de aynı işi yapar.
+
+### Komut satırından
+
+```bash
+cd ~/syspano
+./guncelle.sh --denetle     # önce bak: yeni commit var mı?
+./guncelle.sh               # güncelle: git pull + paketi yeniden kur
+```
+
+`guncelle.sh` şunları yapar: uzak depoyu çeker, geride kalan commit'leri listeler,
+yerel değişiklik varsa **durdurur** (`--zorla` ile `git stash` yapıp devam eder),
+`git merge --ff-only` ile ilerletir, `install.sh`'ın yazdığı **kurulum kaydına**
+bakarak paketi aynı yöntemle (pipx / pip --user) yeniden kurar.
+
+Paketin kendi komutları da aynı işi yapar ve SSH'de de çalışır:
+
+```bash
+syspano --guncelle-denetle   # yerel sürüm + uzak durum
+syspano --guncelle           # güncelle ve yeniden kur
+syspano --kurulum-bilgisi    # nasıl kuruldu, kayıt nerede
+```
+
+### Pano üzerinden (dokunmatik)
+
+⚙ düğmesi → **SÜRÜM** bölümü:
+
+| Düğme | İşlev |
+|---|---|
+| **Güncellemeyi denetle** | Yeni sürüm var mı bakar (ağa çıkar) |
+| **Güncelle (arka planda)** | Güncellemeyi ayrı bir süreçte başlatır; pano donmaz |
+| **Panoyu yeniden başlat** | Yeni kodu yükler |
+
+⚙ düğmesinin sağ üstünde **sarı bir nokta** belirirse yeni sürüm var demektir.
+Denetim günde bir kez, arka planda kendiliğinden yapılır (`guncelleme_denetimi`).
+
+> [!IMPORTANT]
+> Güncelleme sonrası pano **yeniden başlatılmalıdır**: Python kodu bellekte
+> kalır. Servis olarak çalışıyorsa `systemctl --user restart syspano`, ya da
+> ayar ekranındaki **Panoyu yeniden başlat**.
+
+Günlükler ve durum dosyaları:
+
+| Yol | İçerik |
+|---|---|
+| `~/.local/state/syspano/kurulum.json` | Kurulum kaydı: yöntem, kaynak dizin, sürüm |
+| `~/.local/state/syspano/surum-denetimi.json` | Son denetimin sonucu |
+| `~/.local/state/syspano/guncelleme.log` | Panodan başlatılan güncellemenin çıktısı |
+
+Kurulum kaydı yoksa (depo kopyalanmadan kurulduysa) elle güncelleyin:
+
+```bash
+python3 -m pip install --user --upgrade /yol/syspano
+# ya da depo adresinden:
+python3 -m pip install --user --upgrade git+https://github.com/botanguner/syspano.git
+```
+
+## Ayarlar (pano üzerinden)
+
+Üst şeritteki **⚙** düğmesi (ya da `syspano --ayarlar`) panoyu ayar ekranına
+çevirir. Ayrı pencere açılmaz, her şey aynı tuvalde çizilir; değişiklikler
+**anında uygulanır** ve `~/.config/syspano/config.json`'a yazılır.
+
+| Ayar | Seçenekler | Not |
+|---|---|---|
+| **Ölçek** | 0,70 – 3,00 kaydırıcı + −/+ + **Oto** | Canlı; *Oto* DPI hesabına döner |
+| **Tema** | Koyu / Açık | Canlı |
+| **Büyüteç** | Otomatik / Açık / Kapalı | Canlı |
+| **Güncelleme** | 0,5 / 1 / 2 / 5 sn | Ölçüm aralığı |
+| **Hedef ekran** | Otomatik / Ana / çıkışlar / Tümü | **Yeniden başlatma gerekir** |
+| **Gömülü terminal** | açık/kapalı | sonraki açılışta |
+| **Tepsi simgesi** | açık/kapalı | **Yeniden başlatma gerekir** |
+| **Kartları otomatik gizle** | açık/kapalı | Canlı |
+| **Kartlar** | 11 kart için anahtar | Canlı |
+| **Sürüm** | denetle / güncelle / yeniden başlat / sıfırla | — |
+
+### Neden dokunmatik için uygun
+
+- Her denetim en az **46 tasarım birimi** yüksekliğinde; 800×480'lik bir panelde
+  bu ~64 piksel eder, parmakla rahat basılır.
+- Kaydırıcı çubuğunun görünen yüksekliği 8 birim ama **dokunma alanı 46 birim**
+  — çubuğun herhangi bir yerine dokunup sürüklemek yeter, ince tutamacı
+  tutturmaya çalışmak gerekmez. Ayrıca −/+ düğmeleri ve **Oto** vardır.
+- Yalnızca **dokunma** ve **sürükleme** kullanılır: üzerine gelme (hover), sağ
+  tık ve tekerlek zorunluluğu yok. Parmakla yukarı/aşağı sürüklemek listeyi
+  kaydırır (sağ kenarda kaydırma çubuğu görünür).
+- Dar panelde etiket üstte, denetim altta tam genişlikte; geniş ekranda etiket
+  solda, denetim sağda. Aynı kod her ikisini de üretir.
+
+Ayar ekranının yerleşimi saf bir fonksiyondur (`arayuz/ayar_ekrani.py:yerlesim`),
+bu yüzden her ekran boyutunda otomatik test edilir: denetimler çakışmaz, dokunma
+hedefleri küçülmez, hiçbir öğe ölçekli sınırların dışına çıkmaz.
+
 ## Yapılandırma
 
 Yapılandırma dosyası: `~/.config/syspano/config.json` (ilk çalıştırmada
@@ -186,6 +286,7 @@ seçenekleri her zaman dosyayı geçersiz kılar.
   "terminal_yazi": null,
   "tepsi": true,
   "guncelleme_ms": 1000,
+  "guncelleme_denetimi": true,
   "yedek_durum_yolu": "~/.local/state/gdrive-yedek/durum.json",
   "yedek_zamanlayici": "yedek.timer"
 }
@@ -319,6 +420,9 @@ flowchart TD
 | `src/syspano/toplayici.py` | Tüm toplayıcıları tek sözlükte birleştirir |
 | `src/syspano/cihaz/*.py` | Her bileşen için bağımsız, hataya dayanıklı okuyucu |
 | `src/syspano/arayuz/yerlesim.py` | **Saf** uyarlanabilir yerleşim (Tk'sız, test edilebilir) |
+| `src/syspano/arayuz/ayar_ekrani.py` | **Saf** ayar ekranı yerleşimi + dokunmatik denetimler |
+| `src/syspano/guncelleme.py` | Kurulum kaydı, sürüm denetimi, `git pull` + yeniden kurulum |
+| `install.sh` / `guncelle.sh` / `uninstall.sh` | Kur, güncelle, kaldır (apt/dnf/pacman/zypper tanır) |
 | `src/syspano/arayuz/kartlar.py` | Kart çizicileri (dikdörtgene uyarlanır) |
 | `src/syspano/arayuz/cekim.py` | Tasarım→piksel dönüşümü, kaydırma, büyüteç kırpması |
 | `src/syspano/arayuz/pano.py` | Pencere, olaylar, çizim döngüsü, tepsi iletişimi |
@@ -344,7 +448,9 @@ PYTHONPATH=src python3 tests/test_uygulama.py    # pano + büyüteç + terminal
 | `test_cihaz.py` | Toplayıcılar gerçek donanımda çökmeden veri üretiyor mu |
 | `test_ortam.py` | Fare/dokunmatik ayrımı (girdi aygıtları) ve büyüteç kararı |
 | `test_ayar.py` | Yapılandırma; varsayılanların dosyaya düşmemesi |
-| `test_uygulama.py` | Pano kurulur, çizilir, büyüteç koşulları ve terminal geçişi çalışır |
+| `test_ayar_ekrani.py` | Ayar ekranı yerleşimi: çakışma yok, dokunma hedefleri yeterli, çizim ölçeğe uyuyor, isabet denetimi |
+| `test_guncelleme.py` | Sürüm karşılaştırma, kurulum kaydı ve **gerçek git senaryosuyla** güncelleme |
+| `test_uygulama.py` | Pano kurulur, çizilir; büyüteç koşulları, terminal geçişi ve ayar ekranında dokunma çalışır |
 
 Ölçek ve yerleşimi denemek için:
 
