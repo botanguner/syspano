@@ -80,6 +80,119 @@ def test_yardimci_bicimler():
     assert "saat" in sure_metni(7200)
 
 
+# ─── performans davranışları ─────────────────────────────────────────────────
+def test_surecler_her_saniye_taranmaz():
+    """`/proc` taraması pahalı; `ARALIK` içinde tekrar taranmamalı."""
+    from syspano.cihaz import surecler
+    d = Toplayici({"guncelleme_ms": 1000})
+    sayac = {"n": 0}
+    gercek = surecler._ornek
+
+    def sayan():
+        sayac["n"] += 1
+        return gercek()
+
+    surecler._ornek = sayan
+    try:
+        surecler.oku(d, {})
+        ilk = sayac["n"]
+        for _ in range(6):
+            surecler.oku(d, {})
+        assert sayac["n"] == ilk, "süreç listesi her ölçümde yeniden taranıyor"
+        assert d.surec_sonuc.get("liste") is not None
+    finally:
+        surecler._ornek = gercek
+
+
+def test_yavas_sensor_seyreltilir():
+    """Okuması pahalı sensör (ör. NVMe ~9 ms) her ölçümde okunmamalı."""
+    from syspano.cihaz import ortak as _ortak
+    from syspano.cihaz import sicaklik as S
+    okuma = {"n": 0}
+    gercek = _ortak.oku_sayi
+
+    def sayan(yol, varsayilan=None):
+        okuma["n"] += 1
+        return 45000.0
+
+    _ortak.oku_sayi = sayan
+    try:
+        kayit = {"yol": "/sahte", "etiket": "nvme", "aralik": 10.0,
+                 "deger": None, "zaman": 0.0, "maliyet": 9.0}
+        t0 = 1000.0
+        assert S._deger(kayit, t0) == 45000.0
+        assert okuma["n"] == 1
+        for i in range(1, 10):                    # aynı saniye içinde 9 ölçüm daha
+            S._deger(kayit, t0 + i * 0.1)
+        assert okuma["n"] == 1, "seyreltilen sensör her ölçümde okunuyor"
+        S._deger(kayit, t0 + 11)                  # aralık doldu
+        assert okuma["n"] == 2
+    finally:
+        _ortak.oku_sayi = gercek
+
+
+def test_hizli_sensor_her_olcumde_okunur():
+    """Ucuz sensör (coretemp ~0,04 ms) seyreltilmemeli."""
+    from syspano.cihaz import ortak as _ortak
+    from syspano.cihaz import sicaklik as S
+    okuma = {"n": 0}
+    gercek = _ortak.oku_sayi
+
+    def sayan(yol, varsayilan=None):
+        okuma["n"] += 1
+        return 49000.0
+
+    _ortak.oku_sayi = sayan
+    try:
+        kayit = {"yol": "/sahte", "etiket": None, "aralik": 0.0,
+                 "deger": None, "zaman": 0.0, "maliyet": 0.04}
+        for i in range(5):
+            S._deger(kayit, 1000.0 + i)
+        assert okuma["n"] == 5, "ucuz sensör seyreltilmiş"
+    finally:
+        _ortak.oku_sayi = gercek
+
+
+def test_sicaklik_haritasi_tekrar_kurulmaz():
+    """Sensör haritası her ölçümde yeniden taranmamalı."""
+    from syspano.cihaz import sicaklik as S
+    d = Toplayici({"guncelleme_ms": 1000})
+    d.hwmon = {}
+    S.oku(d, {})
+    ilk = d.sicaklik_haritasi
+    for _ in range(5):
+        S.oku(d, {})
+    assert d.sicaklik_haritasi is ilk, "sensör haritası her ölçümde yeniden kuruluyor"
+
+
+def test_gpu_kart_listesi_onbelleklenir():
+    """sysfs GPU kart taraması her saniye yapılmamalı."""
+    from syspano.cihaz import gpu
+    d = Toplayici({"guncelleme_ms": 1000})
+    d.hwmon = {}
+    sayac = {"n": 0}
+    gercek = gpu._kart_bul
+
+    def sayan():
+        sayac["n"] += 1
+        return gercek()
+
+    gpu._kart_bul = sayan
+    try:
+        for _ in range(5):
+            gpu.gpu_kartlari(d)
+        assert sayac["n"] == 1, "GPU kart listesi her ölçümde yeniden taranıyor"
+    finally:
+        gpu._kart_bul = gercek
+
+
+def test_which_onbelleklenir():
+    from syspano.cihaz import gpu
+    gpu._komut_onbellek.clear()
+    assert gpu.ortam_komut("bu-komut-yok-12345") is False
+    assert "bu-komut-yok-12345" in gpu._komut_onbellek
+
+
 if __name__ == "__main__":
     import traceback
     gecen = kalan = 0

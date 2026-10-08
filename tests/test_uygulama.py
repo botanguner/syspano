@@ -250,6 +250,51 @@ def _bekleyen_zamanlayici(p):
         return -1
 
 
+def test_kare_degistirme_ogeleri_biriktirmez():
+    """Yeni kare eskisi dururken çizilir; eski öğeler silinmeli.
+
+    (Bu yöntem Tk'de silme-sonrası-çizim bedelini kaldırır — ölçüm: kare
+    başına 20,6 ms → 3,6 ms. Öğe birikirse bellek ve çizim süresi büyür.)
+    """
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        _bekle(p, 1.2)
+        p.ciz()
+        p.kok.update()
+        ilk = len(p.c.find_all())
+        assert ilk > 20, f"beklenenden az öğe: {ilk}"
+        for _ in range(25):
+            p.ciz()
+        p.kok.update()
+        son = len(p.c.find_all())
+        assert son <= ilk + 5, f"kare öğeleri birikiyor: {ilk} → {son}"
+        # içerik ve kare etiketleri yerinde mi?
+        assert p.c.find_withtag("kare"), "kare etiketi yok"
+        assert p.c.find_withtag("icerik"), "içerik etiketi yok"
+    finally:
+        p.kapat()
+
+
+def test_pencere_gizliyken_cizilmez():
+    """Pencere gizliyken (tepsiden saklandı) çizim yapılmamalı."""
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        _bekle(p, 1.0)
+        p.ciz()
+        p.kok.update()
+        p.gizle()
+        once = len(p.c.find_all())
+        p.ciz()
+        p.kok.update()
+        assert len(p.c.find_all()) == once, "gizliyken de çiziliyor"
+    finally:
+        p.kapat()
+
+
 def test_cizim_dongusu_cogalmaz():
     """Elle tetiklenen çizimler zamanlayıcı biriktirmemeli.
 

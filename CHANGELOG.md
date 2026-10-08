@@ -3,6 +3,44 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.2.0] — 2026-10-08
+
+### Değişti — kaynak kullanımı yarıdan fazla azaldı
+Ölçüm (14" dizüstü, 1400×880 pencere): toplam CPU **%5,0 → %2,35** (50 → 23,5
+ms/sn), toplayıcı 39,5 → 21,7 ms/sn, çizim karesi 20,6 → 3,6 ms, pencere
+gizliyken %1,6. Ölçüm aracı eklendi: `arac/olcum.py`.
+
+- **Kare değiştirme (5,8×).** Tk'de `delete("all")` sonrası öğe oluşturmak, her
+  öğe için "hasarlı bölge" hesabı yüzünden çok pahalıdır (ölçüm: 178 öğe için
+  23,6 ms; silmeden 3,8 ms). Pano artık yeni kareyi eski kare **tuvalde
+  dururken** çiziyor, sonra eskisini siliyor ve etiketleri değiştiriyor
+  (`KARE`/`KARE_YENI`). Öğe birikmediği testle güvenceye alındı.
+- **Uyarlanabilir sensör seyreltmesi.** `_harita_kur` her sensörün okuma
+  maliyetini bir kez ölçer; < 0,3 ms olanlar her ölçümde, 0,3–2 ms olanlar
+  5 sn'de, ≥ 2 ms olanlar 10 sn'de bir okunur. NVMe sıcaklığı tek başına
+  9,25 ms sürüyordu (diske SMART komutu) — sıcaklık modülü 9,9 → 0,6 ms.
+- **Önbellekler:** GPU kart listesi ve sysfs yolları 60 sn'de bir taranır,
+  `which()` sonucu saklanır. Süreç listesi (`/proc` taraması, ~8 ms) 3 sn'de
+  bir; `nvidia-smi` (~30 ms, süreç başlatır) kart boştayken 2 sn'de bir
+  (çalışırken 1 sn); `vcgencmd` 3 sn'de bir.
+- **Pencere gizliyken çizim yapılmaz** (tepsiden saklandığında CPU ~%1,6'ya
+  düşer); büyüteç kapalıyken bekçi zamanlayıcısı 100 ms yerine 400 ms.
+- Kaydırma sırasında içerik `canvas.move` ile taşınıyor (önceki sürümde).
+
+### Düzeltildi
+- `sicaklik`: sensör 0 döndürdüğünde harita her saniye yeniden kuruluyordu;
+  artık yalnızca sensör dosyası gerçekten kaybolduğunda (en çok 5 sn'de bir).
+- Etiket adlandırması netleşti: ekrandaki kare `kare`, çizilmekte olan
+  `kare-yeni` (önceden görünen kare yanıltıcı biçimde `eski-kare` idi).
+
+### Eklendi
+- `arac/olcum.py`: modül modül toplayıcı süresi, çizim karesi ve kaydırma
+  maliyeti; üretim temposunda (1 sn aralık) ölçüm.
+- Testler: süreç taramasının seyreltildiği, yavaş sensörün seyreltildiği, ucuz
+  sensörün seyreltilmediği, sensör haritası ve GPU kart listesinin yeniden
+  kurulmadığı, `which()` önbelleği, kare öğelerinin birikmediği ve gizliyken
+  çizilmediği denetleniyor. **10 dosyada 79 test.**
+
 ## [1.1.2] — 2026-10-08
 
 ### Düzeltildi
