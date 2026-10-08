@@ -132,9 +132,13 @@ def _sway():
 
 # ─── kscreen-doctor (KDE mantıksal uzay — DPI tamamlayıcısı) ─────────────────
 def _kscreen():
-    """{çıkış adı: (x, y, w, h)} — KWin'in mantıksal uzayı (kscreen-doctor)."""
-    if not ortam.komut_var("kscreen-doctor"):
-        return {}
+    """{çıkış adı: (x, y, w, h)} — KWin'in mantıksal uzayı (kscreen-doctor).
+
+    Burada `komut_var()` ile ön denetim yapılmaz: komut kurulu değilse
+    `ortam.komut()` boş döner ve ayrıştırma zaten boş sözlük üretir. Böylece
+    kscreen-doctor olmayan sistemlerde (GNOME, Xfce, Raspberry Pi OS) ve
+    testlerde de aynı yol izlenir.
+    """
     cikti = ortam.ansi_temizle(ortam.komut(["kscreen-doctor", "-o"]))
     sonuc = {}
     for blok in re.split(r"Output:\s*\d+\s+", cikti)[1:]:
