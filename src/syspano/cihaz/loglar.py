@@ -82,6 +82,22 @@ DESENLER = (
 # Sistem günlükleri her saniye yazıldığı için en sonda kalır.
 GRUP_SIRASI = ("php", "uygulama", "apache", "nginx", "veritabani", "sunucu", "ozel")
 
+# journald'a yazan servisler: dosya günlüğü olmayanlar (Debian/Raspberry Pi OS'ta
+# MariaDB, PostgreSQL, Redis, Docker, SSH) buradan okunur. "journalctl -u" ile
+# okunur; dosya kaynaklarından SONRA listelenir.
+#   (grup, ekranda görünecek etiket, systemd birimi — "-k" çekirdek günlüğü)
+JOURNAL_KAYNAKLARI = (
+    ("veritabani", "MariaDB", "mariadb.service"),
+    ("veritabani", "MySQL", "mysql.service"),
+    ("veritabani", "PostgreSQL", "postgresql.service"),
+    ("veritabani", "Redis", "redis-server.service"),
+    ("uygulama", "Docker", "docker.service"),
+    ("sunucu", "SSH", "ssh.service"),
+    ("sunucu", "SSH", "sshd.service"),
+    ("sunucu", "Çekirdek", "-k"),
+)
+CEKIRDEK_BIRIMI = "-k"
+
 # Görüntüleyicidebir satırın önem derecesi
 HATA_KELIMELERI = ("error", "fail", "fatal", "exception", "critical", "panic", "hata")
 UYARI_KELIMELERI = ("warn", "notice", "deprecated", "uyarı")
@@ -123,6 +139,7 @@ def _satir(grup, etiket, yol):
     except OSError as hata:
         return None
     return {
+        "tur": "dosya",
         "grup": grup,
         "etiket": etiket,
         "ad": os.path.basename(yol),
@@ -133,19 +150,82 @@ def _satir(grup, etiket, yol):
     }
 
 
+def _birim_adi(ad):
+    """'journal:mariadb' → 'mariadb.service' (kısa yazımı da kabul et)."""
+    ad = str(ad).strip()
+    if ad == CEKIRDEK_BIRIMI or "." in ad:
+        return ad
+    return ad + ".service"
+
+
+def journal_kaynaklari(ayar=None):
+    """journald'a yazan servisler (dosya günlüğü olmayanlar) — ucuz keşif.
+
+    Tek bir `systemctl show` çağrısıyla kurulu birimler bulunur (~30–90 ms) ve
+    yalnızca **çalışan/başarısız** olanlar listeye girer. İçerik okunmaz; pano
+    kartında "journal" yazar, satıra dokununca `journalctl` çıktısı açılır.
+    """
+    from . import servisler as S
+    if not S.systemd_var():
+        return []
+    # kullanıcının kendi ekledikleri de olabilir: journal:birim  biçiminde
+    ek = [str(x) for x in (ayar or {}).get("log_dosyalari") or []
+          if str(x).startswith("journal:")]
+    tablo = list(JOURNAL_KAYNAKLARI) + [
+        ("ozel", x.split(":", 1)[1], _birim_adi(x.split(":", 1)[1])) for x in ek]
+    birimler = sorted({b for _g, _e, b in tablo if b != CEKIRDEK_BIRIMI})
+    var_olan = set()
+    if birimler:
+        kod, cikti = S._calistir(["systemctl", "show", *birimler,
+                                  "-p", "Id,LoadState,ActiveState"], 8)
+        if kod == 0:
+            for kayit in S.show_ayristir(cikti):
+                ad = kayit.get("Id") or ""
+                # yalnızca kurulu **ve** çalışan/başarısız birimler: durmuş bir
+                # servisin boş günlüğü kartta gereksiz yer kaplar
+                if (ad and kayit.get("LoadState") not in (None, "", "not-found")
+                        and kayit.get("ActiveState") in ("active", "activating",
+                                                         "reloading", "failed")):
+                    var_olan.add(ad)
+    # çekirdek günlüğü: journalctl varsa her zaman anlamlıdır
+    from .. import ortam
+    cekirdek_var = ortam.komut_var("journalctl")
+    kaynaklar = []
+    for grup, etiket, birim in tablo:
+        if birim == CEKIRDEK_BIRIMI:
+            if not cekirdek_var:
+                continue
+        elif birim not in var_olan and birim.split(".")[0] not in var_olan:
+            continue
+        kaynaklar.append({
+            "tur": "journal",
+            "grup": grup,
+            "etiket": etiket,
+            "ad": "çekirdek günlüğü" if birim == CEKIRDEK_BIRIMI else birim,
+            "yol": "",
+            "birim": birim,
+            "boyut": 0,
+            "son": 0.0,
+            "okunabilir": True,
+        })
+    return kaynaklar
+
+
 def _sirala(kaynaklar):
-    """Grup sırasına, sonra en yeni yazılana göre sıralar."""
+    """Grup sırasına, sonra **dosya kaynaklarına** (en yeni önce), en son
+    journal kaynaklarına göre sıralar."""
     def anahtar(k):
         try:
             grup = GRUP_SIRASI.index(k["grup"])
         except ValueError:
             grup = len(GRUP_SIRASI)
-        return (grup, -k["son"], k["ad"])
+        journal = 1 if k.get("tur") == "journal" else 0
+        return (grup, journal, -k["son"], k["ad"])
     return sorted(kaynaklar, key=anahtar)
 
 
-def bul(desen_listesi=None):
-    """Var olan günlük dosyalarını bulur (aynı dosya bir kez sayılır)."""
+def bul(desen_listesi=None, ayar=None, journal=True):
+    """Var olan günlük kaynaklarını bulur: dosyalar + journald servisleri."""
     gorulen, kaynaklar = set(), []
     for grup, etiket, desen in (desen_listesi if desen_listesi is not None
                                 else DESENLER):
@@ -157,6 +237,8 @@ def bul(desen_listesi=None):
             if kayit:
                 gorulen.add(anahtar)
                 kaynaklar.append(kayit)
+    if journal:
+        kaynaklar += journal_kaynaklari(ayar)
     return _sirala(kaynaklar)
 
 
@@ -164,6 +246,9 @@ def tazele(kaynaklar):
     """Boyut ve son yazılma bilgisini yeniler (dosya içeriği okunmaz)."""
     yeni = []
     for k in kaynaklar:
+        if k.get("tur") == "journal":
+            yeni.append(k)                    # stat gerekmez
+            continue
         kayit = _satir(k["grup"], k["etiket"], k["yol"])
         if kayit:
             yeni.append(kayit)
@@ -182,6 +267,23 @@ def gunluk(yol, satir=200):
                 "  sudo usermod -aG systemd-journal $USER   # journalctl için\n"
                 "Sonra oturumu kapatıp açın (gruplar oturumda etkinleşir)."), "izin yok"
     return ortak.kuyruk(yol, satir, AZAMI_BAYT), "dosya"
+
+
+def gunluk_journal(birim, satir=200):
+    """journald'a yazan bir servisin günlüğü: (metin, kaynak)."""
+    from . import servisler as S
+    if str(birim) == CEKIRDEK_BIRIMI:
+        kod, cikti = S._calistir(["journalctl", "-k", "-n", str(satir),
+                                  "--no-pager", "-o", "short-iso"], 10)
+        metin = (cikti or "").strip()
+        if kod != 0 or not metin:
+            kod, cikti = S._calistir(["journalctl", "-k", "-n", str(satir),
+                                      "--no-pager"], 10)
+            metin = (cikti or "").strip()
+        if not metin:
+            return "(çekirdek günlüğü boş)", "journalctl"
+        return metin, "journalctl -k"
+    return S._journal(str(birim), satir), "journalctl"
 
 
 def _satir_turu(metin):
@@ -219,7 +321,7 @@ def oku(d, ayar):
 
     # keşif: pahalı, seyrek
     if d.log_kaynaklar is None or simdi - d.log_kesif > KESIF_OMRU:
-        d.log_kaynaklar = bul(desenler(ayar))
+        d.log_kaynaklar = bul(desenler(ayar), ayar=ayar)
         d.log_kesif = simdi
         d.log_son = 0.0                 # keşif sonrası ilk ölçüm hemen yapılsın
 

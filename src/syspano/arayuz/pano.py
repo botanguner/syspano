@@ -90,7 +90,8 @@ class Pano:
             self.gorunum = ayarlar["baslangic_gorunumu"]
         # günlük görüntüleyici
         self.log_birim = None
-        self.log_tip = "birim"                # "birim" (systemd) | "dosya" (log dosyası)
+        self.log_tip = "birim"                # "birim" (systemd) | "dosya" (log dosyası) | "journal"
+        self.log_etiketi = None               # journal kaynaklarında okunur ad
         self.log_ozet = {"hata": 0, "uyari": 0}
         self.log_suz = False                  # yalnızca hata/uyarı satırları
         self.log_metin = ""
@@ -438,6 +439,7 @@ class Pano:
             return
         self.log_birim = birim
         self.log_tip = "birim"
+        self.log_etiketi = None
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -448,6 +450,18 @@ class Pano:
             return
         self.log_birim = os.path.expanduser(str(yol))
         self.log_tip = "dosya"
+        self.log_etiketi = None
+        self.log_sonuna = True
+        self.log_yenile(ilk=True)
+        self.gorunum_degistir("log")
+
+    def log_ac_journal(self, birim, etiket=None):
+        """journald'a yazan bir servisin günlüğünü açar (MariaDB, SSH, çekirdek…)."""
+        if not birim:
+            return
+        self.log_birim = birim
+        self.log_etiketi = etiket or birim
+        self.log_tip = "journal"
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -459,6 +473,8 @@ class Pano:
         try:
             if self.log_tip == "dosya":
                 metin, kaynak = loglar_modul.gunluk(self.log_birim, satir)
+            elif self.log_tip == "journal":
+                metin, kaynak = loglar_modul.gunluk_journal(self.log_birim, satir)
             else:
                 metin, kaynak = servis_modul.gunluk(self.log_birim, satir, self.ayarlar)
         except Exception as hata:
@@ -481,7 +497,9 @@ class Pano:
         c, R = self.cek, self.R
         x0 = 14.0
         yb = self.LOG_BASLIK_Y
-        baslik = os.path.basename(self.log_birim) if self.log_tip == "dosya" else str(self.log_birim)
+        baslik = (self.log_etiketi
+                  or (os.path.basename(self.log_birim) if self.log_tip == "dosya"
+                      else str(self.log_birim)))
         c.yazi(x0, yb, baslik, 12, R["mavi"], True)
         yas = int(time.monotonic() - self.log_zaman) if self.log_zaman else 0
         ozet = self.log_ozet or {}
@@ -490,6 +508,8 @@ class Pano:
             ayrinti += f" · {ozet.get('hata', 0)} hata · {ozet.get('uyari', 0)} uyarı"
         if self.log_tip == "dosya":
             ayrinti = _kirp_yol(self.log_birim, 46) + " · " + ayrinti
+        elif self.log_tip == "journal":
+            ayrinti = f"{self.log_birim} · " + ayrinti
         c.yazi(x0 + self._metin_gen(baslik, 12, True) + 14, yb, ayrinti, 10, R["cok_soluk"])
         # süzgeç düğmesi + yenile
         dug = (self.tasarim_g - 14 - 92, yb - 14, 92, 28)
@@ -1065,6 +1085,8 @@ class Pano:
                         self.log_ac(eylem[1])
                     elif eylem[0] == "log_dosya":
                         self.log_ac_dosya(eylem[1])
+                    elif eylem[0] == "log_journal":
+                        self.log_ac_journal(eylem[1])
                     return
         if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
             self.terminal_baslat()

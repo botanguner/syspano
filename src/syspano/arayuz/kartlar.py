@@ -542,13 +542,20 @@ def loglar(ck, x, y, w, h, v, g):
                 ck.renk[GUNLUK_RENGI.get(k.get("grup"), "soluk")])
         ck.yazi(x + 34, cy, _kirp(ck, k.get("etiket", "?"), 11, w - 34 - 118),
                 11, ck.renk["yazi"])
-        if not k.get("okunabilir"):
+        if k.get("tur") == "journal":
+            # dosya değil: journald'a yazan servis (boyut/yaş yok)
+            ayrinti, arenk = "journal", ck.renk["turkuaz"]
+        elif not k.get("okunabilir"):
             ayrinti, arenk = "izin yok", ck.renk["kirmizi"]
         else:
             ayrinti = f"{yas_kisa(simdi - (k.get('son') or simdi))} · {boyut_kisa(k.get('boyut'))}"
             arenk = ck.renk["yesil"] if simdi - (k.get("son") or 0) < 90 else ck.renk["soluk"]
         ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, False, "e")
-        TIKLANABILIR.append((("log_dosya", k.get("yol")), (x + 2, sy, w - 4, satir_h)))
+        if k.get("tur") == "journal":
+            eylem = ("log_journal", k.get("birim"))
+        else:
+            eylem = ("log_dosya", k.get("yol"))
+        TIKLANABILIR.append((eylem, (x + 2, sy, w - 4, satir_h)))
 
     if len(kaynaklar) > sigar and y + h - 12 >= ust + sigar * satir_h + 10:
         ck.yazi(x + 34, y + h - 12, f"+{len(kaynaklar) - sigar} günlük daha", 10,
