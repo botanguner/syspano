@@ -319,6 +319,30 @@ def _boyut(bayt):
     return f"{b:.0f}TB"
 
 
+def _kart_uygula(ayarlar, ekle=None, cikar=None):
+    """`--kart-ekle`/`--kart-cikar` için yeni kart listesi (değişiklik yoksa None).
+
+    Liste **yerleşim sırasına** dizilir (ayar ekranının yaptığı gibi). Bilinmeyen
+    kart adları yok sayılır.
+    """
+    kartlar = [k for k in (ayarlar.get("kartlar") or list(KART_BILGI)) if k in KART_BILGI]
+    for k in _liste(ekle or ""):
+        if k in KART_BILGI and k not in kartlar:
+            kartlar.append(k)
+    for k in _liste(cikar or ""):
+        if k in kartlar:
+            kartlar.remove(k)
+    kartlar = [k for k in KART_BILGI if k in set(kartlar)]
+    if not kartlar or kartlar == list(ayarlar.get("kartlar") or []):
+        return None
+    return kartlar
+
+
+def _kartlari_kaydet(kartlar):
+    """Kart listesini yapılandırmaya yazar (kalıcı): yazılan yol."""
+    return ayar_modul.guncelle({"kartlar": kartlar})
+
+
 def main(argv=None):
     args = _olustur_ayristirici().parse_args(argv)
 
@@ -396,12 +420,17 @@ def main(argv=None):
         istenen = [k for k in _liste(args.kartlar) if k in KART_BILGI]
         if istenen:
             ayarlar["kartlar"] = istenen
-    if args.kart_ekle:
-        for k in _liste(args.kart_ekle):
-            if k in KART_BILGI and k not in ayarlar["kartlar"]:
-                ayarlar["kartlar"].append(k)
-    if args.kart_cikar:
-        ayarlar["kartlar"] = [k for k in ayarlar["kartlar"] if k not in _liste(args.kart_cikar)]
+    if args.kart_ekle or args.kart_cikar:
+        # Bunlar **kalıcıdır**: kullanıcı listeyi değiştirmek istiyor
+        # (`--kartlar` ise yalnızca o çalıştırma için geçerlidir).
+        yeni = _kart_uygula(ayarlar, args.kart_ekle, args.kart_cikar)
+        if yeni:
+            ayarlar["kartlar"] = yeni
+            try:
+                _kartlari_kaydet(yeni)
+                print("Kart listesi kaydedildi: " + ", ".join(yeni))
+            except Exception as hata:
+                print(f"Uyarı: kart listesi kaydedilemedi: {hata}", file=sys.stderr)
 
     if args.pencere:
         ayarlar["pencere"] = _pencere_olcusu(args.pencere)
