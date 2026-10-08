@@ -24,6 +24,21 @@ def test_karar_baslat_oldur_bekle():
     assert bekci.karar(True, 100, None) == "oldur"           # varsayılan eşik 90
 
 
+def test_karar_yeni_baslayan_panoyu_oldurmez():
+    """Eski kalp atışı yüzünden yeni başlayan pano öldürülmemeli (Pi'de yaşandı)."""
+    assert bekci.karar(True, 600, 30, surec_yasi_sn=1) == "bekle"
+    assert bekci.karar(True, 600, 30, surec_yasi_sn=14.9) == "bekle"
+    assert bekci.karar(True, 600, 30, surec_yasi_sn=16) == "oldur"
+    # süreç yaşı bilinmiyorsa eski davranış: eşiğe göre karar
+    assert bekci.karar(True, 600, 30, surec_yasi_sn=None) == "oldur"
+
+
+def test_surec_yasi_okunur():
+    yas = bekci.surec_yasi(os.getpid())
+    assert yas is not None and 0 <= yas < 3600, yas
+    assert bekci.surec_yasi(999999) is None                  # olmayan süreç
+
+
 def test_eslesme():
     assert bekci.eslesme(["python3", "-m", "syspano"]) is True
     assert bekci.eslesme(["/usr/bin/python3", "/home/x/.local/bin/syspano"]) is True
