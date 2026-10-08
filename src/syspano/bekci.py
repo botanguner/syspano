@@ -36,6 +36,7 @@ from . import ortam
 VARSAYILAN_ARALIK = 20.0
 VARSAYILAN_ESIK = 90.0
 KALP_ARALIK = 3.0          # pano bu aralıkta yazar (bkz. pano._durum_yaz)
+BASLANGIC_TOLERANS = 15.0  # yeni başlayan panoya tanınan süre (ilk kalp atışı için)
 
 
 def kalp_yolu():
@@ -56,14 +57,38 @@ def kalp_yasi(simdi=None):
         return None
 
 
-def karar(surec_var, kalp_yasi_sn, esik=None):
-    """Bekçinin kararı: `"baslat"` | `"oldur"` | `"bekle"` (saf fonksiyon)."""
+def karar(surec_var, kalp_yasi_sn, esik=None, surec_yasi_sn=None, tolerans=None):
+    """Bekçinin kararı: `"baslat"` | `"oldur"` | `"bekle"` (saf fonksiyon).
+
+    `surec_yasi_sn` verilirse ve süreç `tolerans` saniyeden gençse **öldürülmez**:
+    yeni başlayan pano henüz ilk kalp atışını yazmamış olabilir. Bu tolerans
+    olmadan bekçi, eski kalp atışını görüp yeni panoyu hemen öldürüyordu
+    (Raspberry Pi'de denendi: 1 saniyelik pano "donmuş" sayıldı).
+    """
     esik = VARSAYILAN_ESIK if esik is None else float(esik)
+    tolerans = BASLANGIC_TOLERANS if tolerans is None else float(tolerans)
     if not surec_var:
         return "baslat"
+    if surec_yasi_sn is not None and float(surec_yasi_sn) < tolerans:
+        return "bekle"
     if kalp_yasi_sn is not None and float(kalp_yasi_sn) > esik:
         return "oldur"
     return "bekle"
+
+
+def surec_yasi(pid, simdi=None):
+    """Sürecin yaşı (saniye): /proc/<pid>/stat alan 22 + /proc/uptime."""
+    try:
+        with open(f"/proc/{int(pid)}/stat") as f:
+            icerik = f.read()
+        alanlar = icerik.rsplit(") ", 1)[1].split()      # comm'u ayır
+        baslangic_tik = int(alanlar[19])                 # alan 22
+        with open("/proc/uptime") as f:
+            sistem_yasi = float(f.read().split()[0])
+        hz = os.sysconf("SC_CLK_TCK") or 100
+        return max(0.0, sistem_yasi - baslangic_tik / hz)
+    except Exception:
+        return None
 
 
 def _cmdline(pid):
@@ -184,7 +209,8 @@ def dongu(aralik=None, esik=None, kuru=False, tur_sayisi=None):
     while tur_sayisi is None or tur < tur_sayisi:
         tur += 1
         pid = pano_pid()
-        son_karar = karar(pid is not None, kalp_yasi(), esik)
+        son_karar = karar(pid is not None, kalp_yasi(), esik,
+                          surec_yasi(pid) if pid else None)
         if son_karar == "baslat":
             if kuru:
                 _log("pano yok (kuru çalıştırma: başlatılmadı)")

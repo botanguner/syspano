@@ -3,6 +3,19 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.8.1] — 2026-10-09
+
+### Düzeltildi
+- **Bekçi, yeni başlayan panoyu hemen öldürebiliyordu (thrash).** Pi'de gerçek
+  donma testinde yakalandı: `SIGSTOP` ile dondurulmuş panoyu bekçi doğru
+  kapattı ve yeniden başlattı, ama **bir saniye sonra yeni panoyu da "donmuş"
+  saydı** (`durum.json` hâlâ eski örneğe aitti; yeni pano ilk kalp atışını ~2
+  saniyede yazar). Uzun aradan sonra başlatılan her panoda tekrarlanabilecek bu
+  kusur, süreç yaşı denetimiyle kapatıldı: `/proc/<pid>/stat` alan 22 +
+  `/proc/uptime` ile yaş hesaplanır, pano `BASLANGIC_TOLERANS` (15 sn)
+  altındaysa öldürülmez.
+- 2 yeni test (toplam **18 dosyada 167 test**).
+
 ## [1.8.0] — 2026-10-08
 
 ### Eklendi
