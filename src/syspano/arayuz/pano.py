@@ -80,6 +80,8 @@ class Pano:
         self._son_imza = None
         self._ayar_plan = None                # ayar ekranının son yerleşimi
         self._kaydirici = None                # sürüklenen kaydırıcı (id, ...)
+        self._dongu_id = None                 # bekleyen çizim zamanlayıcısı
+        self._son_cizim = 0.0                 # son tam çizimin zamanı
         self._guncelleme_var = False          # önbellekteki denetim sonucu
         self._guncelleme_kontrol = 0.0
         self.bildiri = ""
@@ -216,13 +218,34 @@ class Pano:
         return {"pano": pano_d, "terminal": terminal, "ayar": ayar, "kapat": kapat}
 
     # ── ana çizim döngüsü ──
+    # ── ana çizim döngüsü ──
     def ciz(self):
+        """Çizer ve bir sonraki çizimi planlar.
+
+        Bekleyen zamanlayıcı önce **iptal edilir**: kaydırma, ayar değişikliği
+        gibi elle tetiklenen çizimler aksi hâlde her seferinde kalıcı bir döngü
+        başlatır ve kısa sürede onlarca çizim üst üste binip panoyu kilitler.
+        """
         if self._kapali:
             return
+        self._dongu_iptal()
+        gecikme = self._ciz_govde()
+        self._dongu_id = self.kok.after(max(100, int(gecikme)), self.ciz)
+
+    def _dongu_iptal(self):
+        if self._dongu_id is not None:
+            try:
+                self.kok.after_cancel(self._dongu_id)
+            except Exception:
+                pass
+            self._dongu_id = None
+
+    def _ciz_govde(self):
+        """Bir kare çizer ve sonraki kareye kadar geçecek ms'yi döndürür."""
+        self._son_cizim = time.monotonic()
         v = self.t.al()
         if not v:
-            self.kok.after(300, self.ciz)
-            return
+            return 300
         for ad, deger in (("cpu", (v.get("cpu") or {}).get("yuzde")),
                           ("bellek", (v.get("bellek") or {}).get("yuzde")),
                           ("sicaklik", (v.get("sicaklik") or {}).get("paket")),
@@ -246,11 +269,10 @@ class Pano:
         if self.gorunum == "terminal":
             if self.terminal:
                 self.terminal.ciz(zorla=True)
-            self.kok.after(500, self.ciz)
-        else:
-            if self.gorunum == "pano":
-                self._mercek_ciz(v)
-            self.kok.after(max(200, int(self.ayarlar.get("guncelleme_ms", 1000))), self.ciz)
+            return 500                      # imleç yanıp sönsün diye daha sık
+        if self.gorunum == "pano":
+            self._mercek_ciz(v)
+        return max(200, int(self.ayarlar.get("guncelleme_ms", 1000)))
 
     @staticmethod
     def _igpu_kullanim(v):
@@ -261,11 +283,12 @@ class Pano:
 
     def _icerik_ciz(self, v, plan):
         c = self.cek
+        durum = None
         # kaydırma sınırları
         if self.gorunum == "ayar":
+            durum = self._ayar_durumu()
             self._ayar_plan = ayar_ekrani.yerlesim(
-                self.tasarim_g, self.tasarim_y, self.ayarlar, self.cikislar,
-                self._ayar_durumu())
+                self.tasarim_g, self.tasarim_y, self.ayarlar, self.cikislar, durum)
             self._max_kaydir = max(0.0, self._ayar_plan["icerik_y"] * self.S - self.h)
         elif plan:
             self._max_kaydir = max(0.0, plan["icerik_y"] * self.S - self.h)
@@ -273,10 +296,11 @@ class Pano:
             self._max_kaydir = 0.0
         self.kaydir = max(0.0, min(self.kaydir, self._max_kaydir))
 
-        # içerik (kaydırmalı)
+        # içerik (kaydırmalı) — "icerik" etiketi, kaydırmada `move` ile taşınır
         c.kaydir_ayarla(self.kaydir)
+        c.etiket("icerik")
         if self.gorunum == "ayar":
-            ayar_ekrani.ciz(c, self._ayar_plan, self._ayar_durumu())
+            ayar_ekrani.ciz(c, self._ayar_plan, durum)
         elif plan:
             for kid, (x, y, w, h) in plan["kartlar"].items():
                 # ekran dışında kalan kartı hiç çizme (kaydırmada hız kazancı)
@@ -289,7 +313,8 @@ class Pano:
                     except Exception as hata:
                         c.yazi(x + 14, y + h / 2, f"kart hatası: {hata}"[:44], 10,
                                c.renk["kirmizi"])
-        # üst şerit ve alt bilgi kaydırmadan etkilenmez
+        c.etiket("")
+        # üst şerit, alt bilgi ve çubuklar kaydırmadan etkilenmez
         c.kaydir_ayarla(0.0)
         self._ustluk_ciz(v)
         self._altbilgi_ciz(v, plan)
@@ -685,12 +710,20 @@ class Pano:
                                   ayar_ekrani._kaydirici_deger(kutu, olay.x / self.S))
                 self.ciz()
             return
-        if self._tiklama is None or self._max_kaydir <= 0:
+        if (self.gorunum == "terminal" or self._tiklama is None
+                or self._max_kaydir <= 0):
             return
-        self.kaydir = max(0.0, min(self._max_kaydir,
-                                   self._tiklama[2] - (olay.y - self._tiklama[1])))
-        self._mercek_gizle()
-        self.ciz()
+        yeni = max(0.0, min(self._max_kaydir,
+                            self._tiklama[2] - (olay.y - self._tiklama[1])))
+        # Parmak takip etsin: içeriği yeniden çizmek yerine tuval öğelerini
+        # kaydır. Tam çizim seyrek yapılır (kaydırmada zaten pahalı olan adım).
+        kayma = self.kaydir - yeni          # `self.kaydir` = son çizimdeki konum
+        if abs(kayma) >= 0.5:
+            self.c.move("icerik", 0, kayma)
+            self.kaydir = yeni
+            self._mercek_gizle()
+        if time.monotonic() - self._son_cizim >= 0.15:
+            self.ciz()
 
     def _birakildi(self, olay):
         if self._tiklama is None:
@@ -700,7 +733,9 @@ class Pano:
         kaydirici_vardi = self._kaydirici is not None
         self._kaydirici = None
         if abs(olay.x - bx) + abs(olay.y - by) > 8:
-            return                       # sürükleme sayıldı
+            # sürükleme bitti: içeriği tam çizimle tazele (kaydırma çubuğu vb.)
+            self.ciz()
+            return
         # düğmeler üst şeritte ve kaydırmadan etkilenmez
         dx, dy = olay.x / self.S, olay.y / self.S
         for ad, (qx, qy, qw, qh) in self._dugmeler(self.tasarim_g).items():
@@ -732,10 +767,15 @@ class Pano:
         num = getattr(olay, "num", 0)
         yukari = (getattr(olay, "delta", 0) > 0) or num == 4
         adim = self.h * 0.18
-        self.kaydir = max(0.0, min(self._max_kaydir,
-                                   self.kaydir - (adim if yukari else -adim)))
-        self._mercek_gizle()
-        self.ciz()
+        yeni = max(0.0, min(self._max_kaydir,
+                            self.kaydir - (adim if yukari else -adim)))
+        kayma = self.kaydir - yeni
+        if abs(kayma) >= 0.5:
+            self.c.move("icerik", 0, kayma)
+            self.kaydir = yeni
+            self._mercek_gizle()
+        if time.monotonic() - self._son_cizim >= 0.10:
+            self.ciz()
 
     def _tus(self, olay):
         if olay.keysym == "Escape" and self.gorunum == "ayar":

@@ -226,10 +226,87 @@ def test_ayar_ekrani_dokunma():
             assert p.ayarlar["olcek"] == 1.6
             assert p.tasarim_g != onceki
             assert abs(p.cek.S - p.S) < 1e-9
+
+            # 6) kaydırdıktan sonra dokunma yine doğru öğeye isabet etmeli
+            p.kaydir = min(150.0, p._max_kaydir)
+            p.ciz()
+            p.kok.update()
+            assert p.kaydir > 0, "kaydırma uygulanmadı"
+            kutu = p._ayar_kutusu("kart:surecler")
+            assert kutu and kutu["deger"] is True
+            dokun(kutu["anahtar"])
+            assert "surecler" not in p.ayarlar["kartlar"], "kaydırmadan sonra yanlış öğe"
         finally:
             os.environ.pop("SYSPANO_YAPILANDIRMA_DIZINI", None)
             if p is not None:
                 p.kapat()
+
+
+def _bekleyen_zamanlayici(p):
+    """Panoda bekleyen `after` sayısı (çizim döngüsü çoğalıyor mu?)."""
+    try:
+        return len(p.kok.tk.call("after", "info"))
+    except Exception:
+        return -1
+
+
+def test_cizim_dongusu_cogalmaz():
+    """Elle tetiklenen çizimler zamanlayıcı biriktirmemeli.
+
+    Bir dönem `ciz()` her çağrısında yeni bir döngü kuruyordu; kaydırma her
+    parmak hareketinde `ciz()` çağırdığı için saniyede onlarca çizim döngüsü
+    birikiyor ve pano (özellikle Pi'de) kilitleniyordu.
+    """
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        _bekle(p, 1.0)
+        once = _bekleyen_zamanlayici(p)
+        assert once > 0, "çizim döngüsü hiç kurulmamış"
+        for _ in range(12):
+            p.ciz()
+        sonra = _bekleyen_zamanlayici(p)
+        assert sonra <= once + 1, f"çizim zamanlayıcıları çoğalıyor: {once} → {sonra}"
+    finally:
+        p.kapat()
+
+
+def test_surukleyerek_kaydirma():
+    """Parmakla kaydırma: içerik takip etmeli, zamanlayıcı çoğalmamalı."""
+    p = _pano_olustur()
+    if p is None:
+        return
+    try:
+        _bekle(p, 1.2)
+        p.gorunum_degistir("ayar")
+        p.ciz()
+        p.kok.update()
+        assert p._max_kaydir > 0, "ayar ekranı kaydırılabilir olmalı"
+        assert p.c.find_withtag("icerik"), "içerik etiketi yok (kaydırma çalışmaz)"
+
+        class Olay:
+            pass
+
+        o = Olay()
+        o.x, o.y = 100, 300
+        p._basildi(o)
+        once = _bekleyen_zamanlayici(p)
+        for adim in range(0, 200, 10):        # parmağı yukarı sürükle
+            o.y = 300 - adim
+            p._surukle(o)
+            p.kok.update()
+        o.y = 100
+        p._surukle(o)                         # son hareket
+        p._birakildi(o)
+        p.kok.update()
+
+        assert abs(p.kaydir - 200) < 2, f"kaydırma konumu {p.kaydir}"
+        assert p.kaydir <= p._max_kaydir
+        sonra = _bekleyen_zamanlayici(p)
+        assert sonra <= once + 1, f"sürükleme zamanlayıcı biriktirdi: {once} → {sonra}"
+    finally:
+        p.kapat()
 
 
 if __name__ == "__main__":
