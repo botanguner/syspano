@@ -235,13 +235,30 @@ syspano --kurulum-bilgisi    # nasıl kuruldu, kayıt nerede
 | **Güncelle (arka planda)** | Güncellemeyi ayrı bir süreçte başlatır; pano donmaz |
 | **Panoyu yeniden başlat** | Yeni kodu yükler |
 
-⚙ düğmesinin sağ üstünde **sarı bir nokta** belirirse yeni sürüm var demektir.
-Denetim günde bir kez, arka planda kendiliğinden yapılır (`guncelleme_denetimi`).
+**Durum her zaman görünür.** SÜRÜM bölümündeki renkli satır ne olduğunu söyler:
+
+| Satır | Anlamı |
+|---|---|
+| `⟳ Denetleniyor… (ağa çıkılıyor)` | Denetim sürüyor (en fazla 30 saniye) |
+| `✓ Güncel · son denetim 5 dk önce` | Yeni sürüm yok (yeşil) |
+| `⬆ Yeni sürüm var: 1.4.1 — «Güncelle»ye dokunun` | Güncellenebilir (sarı) |
+| `⚠ Denetlenemedi: …` / `⚠ Denetim zaman aşımına uğradı` | Ağ ya da git sorunu (kırmızı) |
+| `⏳ Güncelleme sürüyor… (42 sn)` | Güncelleme arka planda çalışıyor |
+| `✓ Güncelleme tamam (1.4.1) — Panoyu yeniden başlatın` | Bitti; yeniden başlatma bekliyor |
+| `⚠ Güncelleme başarısız — …` | Hata (ayrıntı `guncelleme.log`) |
+| `⟳ Kurulu paket 1.4.1, bellekteki kod 1.4.0 — Panoyu yeniden başlatın` | Güncelleme kuruldu ama pano eski kodu bellekte tutuyor |
+
+Sonuç ayrıca ekranın altında **bildirim** olarak da çıkar; ⚙ düğmesinin sağ üstündeki
+**sarı nokta** yalnızca "yeni sürüm var" değil, "yeniden başlatma bekliyor"
+durumunda da yanar. Denetim günde bir kez arka planda kendiliğinden yapılır
+(`guncelleme_denetimi`).
 
 > [!IMPORTANT]
 > Güncelleme sonrası pano **yeniden başlatılmalıdır**: Python kodu bellekte
-> kalır. Servis olarak çalışıyorsa `systemctl --user restart syspano`, ya da
-> ayar ekranındaki **Panoyu yeniden başlat**.
+> kalır. Pano hangi yolla başlatıldıysa ona uygun komut söylenir — servis olarak
+> çalışıyorsa `systemctl --user restart syspano`, masaüstü oturumunda
+> kendiliğinden başlatıldıysa ⚙ → **Panoyu yeniden başlat**. Doğru olanı
+> `syspano --guncelle-denetle` ve `guncelleme.log` da yazar.
 
 Günlükler ve durum dosyaları:
 
@@ -496,7 +513,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **14 dosyada 123 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **14 dosyada 130 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -662,7 +679,7 @@ syspano --log-dosya ~/proje/storage/logs/laravel.log --log-hata   # yalnız hata
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 123 test / 14 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 130 test / 14 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

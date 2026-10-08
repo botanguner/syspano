@@ -28,6 +28,8 @@ from . import ortam
 VARSAYILAN_URL = "https://github.com/botanguner/syspano.git"
 KAYIT_ADI = "kurulum.json"
 DENETIM_ADI = "surum-denetimi.json"
+SUREC_ADI = "guncelleme-durum.json"
+GUNCELLEME_ASAMASI = "guncelleniyor"
 
 
 # ─── yollar ──────────────────────────────────────────────────────────────────
@@ -41,6 +43,10 @@ def kayit_yolu():
 
 def denetim_yolu():
     return os.path.join(durum_dizini(), DENETIM_ADI)
+
+
+def surec_yolu():
+    return os.path.join(durum_dizini(), SUREC_ADI)
 
 
 # ─── kurulum kaydı ───────────────────────────────────────────────────────────
@@ -266,6 +272,163 @@ def denetim_bayati(saat=24):
 def yeni_surum_var():
     """Önbellekteki sonuca göre yeni sürüm var mı? (ağa çıkmaz)"""
     return bool(denetim_oku().get("yeni"))
+
+
+# ─── güncelleme süreci (pano ↔ arka plan süreci) ─────────────────────────────
+def surec_yaz(asama, sonuc=None, mesaj="", baslangic=None, surum=None):
+    """Güncelleme sürecinin durumunu yazar.
+
+    Arka planda çalışan `syspano --guncelle` süreci bunu yazar; pano okuyup
+    "sürüyor / bitti / başarısız" diye gösterir — böylece kullanıcı sonucu
+    tahmin etmek zorunda kalmaz.
+    """
+    d = surec_oku()
+    if asama:
+        d["asama"] = asama
+    if baslangic is not None:
+        d["basladi"] = float(baslangic)
+    if surum is not None:
+        d["surum"] = surum
+    if sonuc is not None:
+        d["bitti"] = time.time()
+        d["sonuc"] = int(sonuc)
+    if mesaj:
+        d["mesaj"] = mesaj
+    gecici = surec_yolu() + ".tmp"
+    with open(gecici, "w") as f:
+        json.dump(d, f, ensure_ascii=False)
+    os.replace(gecici, surec_yolu())
+    return d
+
+
+def surec_oku():
+    """Son güncelleme sürecinin durumu (yoksa boş sözlük)."""
+    try:
+        with open(surec_yolu()) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def kurulu_surum():
+    """Kurulu paketin sürümü (pip kaydı); okunamazsa çalışan sürüm."""
+    try:
+        from importlib.metadata import version
+        return version("syspano")
+    except Exception:
+        return __version__
+
+
+def kurulu_dosya():
+    """Kurulu paketin `__init__.py` yolu (yoksa None)."""
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec("syspano")
+        yol = getattr(spec, "origin", None)
+        return yol if yol and os.path.exists(yol) else None
+    except Exception:
+        return None
+
+
+def yeniden_baslat_gerekli(baslangic=None):
+    """Kurulu kod, bellekte çalışan koddan **yeni** mi? (güncelleme sonrası)
+
+    Güncelleme paketi yeniden kurar ama çalışan süreç eski kodu bellekte tutar;
+    pano bunu fark edip "yeniden başlatın" demelidir.
+
+    * `baslangic` verilirse (pano kendi açılış anını verir): kurulu paketin
+      dosya zamanı ondan sonraysa — en isabetli ölçüt budur.
+    * Verilmezse sürümler karşılaştırılır: kurulu paket, çalışan koddan yeni
+      sürümlüyse. (Bu yüzden eski bir kurulumla depodan çalıştırmak yanlış
+      uyarı vermez.)
+    """
+    if baslangic:
+        yol = kurulu_dosya()
+        if yol:
+            try:
+                return os.path.getmtime(yol) > float(baslangic) + 2
+            except OSError:
+                pass
+    return surum_karsilastir(kurulu_surum(), __version__) > 0
+
+
+def systemd_kullanici_birimi():
+    """Pano systemd **kullanıcı servisi** olarak mı çalışıyor?"""
+    kod, cikti = _calistir(["systemctl", "--user", "list-unit-files",
+                            "syspano.service", "--no-legend"], zaman=5)
+    return kod == 0 and "syspano.service" in (cikti or "")
+
+
+def yeniden_baslat_yolu():
+    """Bu makinede panoyu yeniden başlatmanın doğru yolu (kısa metin).
+
+    Servis olarak çalışıyorsa `systemctl --user restart syspano`; masaüstü
+    oturumunda kendiliğinden başlatıldıysa panodaki ⚙ ekranındaki düğme.
+    """
+    try:
+        if systemd_kullanici_birimi():
+            return "systemctl --user restart syspano"
+    except Exception:
+        pass
+    return "panoda ⚙ → Panoyu yeniden başlat"
+
+
+def _yas_metni(sn):
+    sn = max(0, int(sn))
+    if sn < 90:
+        return "az önce"
+    if sn < 3600:
+        return f"{sn // 60} dk önce"
+    if sn < 86400:
+        return f"{sn // 3600} saat önce"
+    return f"{sn // 86400} gün önce"
+
+
+def durum_metni(denetim=None, surec=None, simdi=None, denetim_suruyor=False,
+                zaman_asimi=False, baslangic=None):
+    """Ayarlar ekranındaki güncelleme durumu: (metin, renk anahtarı).
+
+    **Saf** fonksiyon: ağa çıkmaz, dosya yazmaz. Sıralama, kullanıcının en çok
+    merak ettiği bilgiyi öne koyar: denetim/güncelleme sürüyorsa o, bittiyse
+    sonuç, bekleyen bir yeniden başlatma varsa o, sonra denetim sonucu.
+    """
+    simdi = time.time() if simdi is None else simdi
+    denetim = denetim_oku() if denetim is None else denetim
+    surec = surec_oku() if surec is None else surec
+
+    if denetim_suruyor:
+        return ("⟳ Denetleniyor… (ağa çıkılıyor)", "mavi")
+    if surec.get("asama") == GUNCELLEME_ASAMASI and not surec.get("bitti"):
+        gecen = int(max(0.0, simdi - float(surec.get("basladi") or simdi)))
+        return (f"⏳ Güncelleme sürüyor… ({gecen} sn)", "mavi")
+    if surec.get("bitti"):
+        if surec.get("sonuc"):
+            ayrinti = surec.get("mesaj") or "ayrıntı: güncelleme.log"
+            return (f"⚠ Güncelleme başarısız — {ayrinti}", "kirmizi")
+        surum = surec.get("surum") or kurulu_surum()
+        return (f"✓ Güncelleme tamam ({surum}) — Panoyu yeniden başlatın", "sari")
+    if zaman_asimi:
+        return ("⚠ Denetim zaman aşımına uğradı (ağ yok?) — yeniden deneyin", "kirmizi")
+    if yeniden_baslat_gerekli(baslangic):
+        kurulu = kurulu_surum()
+        if kurulu and kurulu != __version__:
+            return (f"⟳ Kurulu paket {kurulu}, bellekteki kod {__version__}"
+                    " — Panoyu yeniden başlatın", "sari")
+        return ("⟳ Güncelleme kuruldu ama pano eski kodu bellekte tutuyor"
+                " — Panoyu yeniden başlatın", "sari")
+    if not denetim or not denetim.get("zaman"):
+        return ("Güncelleme durumu bilinmiyor — «Güncellemeyi denetle»", "soluk")
+    if denetim.get("hata"):
+        return (f"⚠ Denetlenemedi: {denetim['hata']}", "kirmizi")
+    if denetim.get("kurulum_gerekli"):
+        return (f"⚠ Yeniden kurulum gerekli (depo {denetim.get('depo_surum') or '?'})",
+                "sari")
+    if denetim.get("yeni"):
+        hedef = denetim.get("depo_surum") or denetim.get("uzak") or "?"
+        return (f"⬆ Yeni sürüm var: {hedef} — «Güncelle»ye dokunun", "sari")
+    return (f"✓ Güncel · son denetim {_yas_metni(simdi - float(denetim['zaman']))}",
+            "yesil")
 
 
 # ─── güncelleme ──────────────────────────────────────────────────────────────

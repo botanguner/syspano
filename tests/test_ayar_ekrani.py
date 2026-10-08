@@ -206,6 +206,38 @@ def test_anahtar_olcege_uyar():
         kok.destroy()
 
 
+def test_guncelleme_durumu_gorunur():
+    """SÜRÜM kutusu, güncelleme durumunu renkli satır olarak göstermeli."""
+    durum = dict(DURUM)
+    durum["guncelleme"] = {"metin": "✓ Güncel · son denetim az önce", "renk": "yesil"}
+    plan = A.yerlesim(1200, 700, AYARLAR, [], durum)
+    durum_kutulari = [k for k in plan["kutular"] if k["tur"] == "durum"]
+    assert durum_kutulari, "güncelleme durumu satırı yok"
+    k = durum_kutulari[0]
+    assert k["etiket"] == "✓ Güncel · son denetim az önce"
+    assert k["renk"] == "yesil"
+    assert k["h"] >= 18, "durum satırı çok ince"
+    # durum yoksa satır da olmamalı (boş satır bırakmasın)
+    plan2 = A.yerlesim(1200, 700, AYARLAR, [], DURUM)
+    assert not [k for k in plan2["kutular"] if k["tur"] == "durum"]
+    # durum satırı içeriği aşağı itmeli (plan yüksekliği artar)
+    assert plan["icerik_y"] > plan2["icerik_y"]
+
+
+def test_olcek_kirpildiginda_uyarir():
+    """Küçük ekranda istenen ölçek uygulanamıyorsa ayar ekranı bunu söylemeli."""
+    ayarlar = dict(AYARLAR, olcek=2.8)
+    durum = dict(DURUM, olcek_istenen=2.8, olcek_etkin=1.5)
+    plan = A.yerlesim(575, 343, ayarlar, [], durum)
+    metinler = [k["etiket"] for k in plan["kutular"] if k["tur"] == "aciklama"]
+    assert any("en fazla 1.50" in m for m in metinler), metinler
+    # kırpma yoksa uyarı da olmamalı
+    durum2 = dict(DURUM, olcek_istenen=2.8, olcek_etkin=2.8)
+    plan2 = A.yerlesim(2000, 1126, ayarlar, [], durum2)
+    metinler2 = [k["etiket"] for k in plan2["kutular"] if k["tur"] == "aciklama"]
+    assert not any("en fazla" in m for m in metinler2), metinler2
+
+
 def test_cizim_icerik_icinde():
     """Tüm ayar ekranı, ölçekli içerik alanının dışına taşmamalı."""
     kok, cv, cek = _cekim_hazirla(olcek=1.7)

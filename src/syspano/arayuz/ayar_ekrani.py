@@ -109,6 +109,14 @@ def yerlesim(tasarim_g, tasarim_y, ayarlar, cikislar=(), durum=None):
                         "x": x0, "y": y, "w": icerik_g, "h": 16})
         y += 16 + 8
 
+    def durum_satiri(metin, renk="soluk"):
+        """Renkli durum satırı (ör. güncelleme durumu: güncel/yeni sürüm/hata)."""
+        nonlocal y
+        kh = 20
+        kutular.append({"tur": "durum", "id": None, "etiket": metin,
+                        "renk": renk, "x": x0, "y": y, "w": icerik_g, "h": kh})
+        y += kh + 8
+
     def etiket_noktasi(kh):
         """Etiketin çizileceği yer: dar düzende üstte, geniş düzende ortada."""
         return (x0 + 2, y + 11) if dar else (x0 + 4, y + kh / 2)
@@ -162,6 +170,11 @@ def yerlesim(tasarim_g, tasarim_y, ayarlar, cikislar=(), durum=None):
     baslik("GÖRÜNÜM")
     kaydirici_satiri("olcek", "Ölçek", float(ayarlar.get("olcek") or 0.0),
                      0.7, 3.0, 0.05, oto_id="olcek_oto", oto_var=True)
+    _istenen = durum.get("olcek_istenen") or 0.0
+    _etkin = durum.get("olcek_etkin") or 0.0
+    if _istenen and _etkin and abs(float(_istenen) - float(_etkin)) > 0.01:
+        aciklama(f"Bu ekranda en fazla {_etkin:.2f} uygulanabiliyor "
+                 f"(istenen {_istenen:.2f})")
     secenek_satiri("tema", "Tema",
                    [("koyu", "Koyu"), ("acik", "Açık")],
                    ayarlar.get("tema", "koyu"))
@@ -205,6 +218,10 @@ def yerlesim(tasarim_g, tasarim_y, ayarlar, cikislar=(), durum=None):
     # ── sürüm / güncelleme ──
     baslik("SÜRÜM")
     aciklama(durum.get("surum_metni") or "")
+    guncelleme_durum = durum.get("guncelleme") or {}
+    if guncelleme_durum.get("metin"):
+        durum_satiri(guncelleme_durum["metin"],
+                     guncelleme_durum.get("renk") or "soluk")
     dugme_satiri("guncelle_denetle", "Güncellemeyi denetle")
     dugme_satiri("guncelle_uygula", "Güncelle (arka planda)")
     dugme_satiri("yeniden_baslat", "Panoyu yeniden başlat")
@@ -243,6 +260,9 @@ def ciz(cek, plan, durum=None):
             cek.dik(k["x"], k["y"] + 21, k["x"] + k["w"], k["y"] + 21.8, R["kenar"])
         elif tur == "aciklama":
             cek.yazi(k["x"], k["y"] + 8, k["etiket"], 10, R["cok_soluk"])
+        elif tur == "durum":
+            cek.yazi(k["x"], k["y"] + k["h"] / 2, k["etiket"], 11.5,
+                     R.get(k.get("renk") or "soluk", R["soluk"]), True)
         elif tur == "secenek":
             _etiket(cek, k)
             for deger, etiket, (bx, by, bw, bh) in k["secenekler"]:
