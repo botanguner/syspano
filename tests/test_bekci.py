@@ -115,6 +115,29 @@ def test_olur_zararsiz_sureci_sonlandirir():
             del os.environ["XDG_STATE_HOME"]
 
 
+def test_bekci_tek_kopya_calisir():
+    """İkinci bir bekçi başlatılırsa kendini kapatmalı (panoyu iki kez yönetmesin)."""
+    assert bekci.bekci_eslesme(["python3", "-m", "syspano", "--bekci"]) is True
+    assert bekci.bekci_eslesme(["/usr/bin/python3", "/home/x/.local/bin/syspano",
+                                "--bekci"]) is True
+    assert bekci.bekci_eslesme(["python3", "-m", "syspano"]) is False
+    assert bekci.bekci_eslesme(["python3", "-m", "syspano", "--bekci-kuru"]) is False
+
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["XDG_STATE_HOME"] = d
+        try:
+            gercek = bekci.bekci_pid
+            bekci.bekci_pid = lambda haric=(): 4242
+            try:
+                assert bekci.dongu(tur_sayisi=1) == "bekci_var"
+                with open(bekci.gunluk_yolu()) as f:
+                    assert "başka bir bekçi" in f.read()
+            finally:
+                bekci.bekci_pid = gercek
+        finally:
+            del os.environ["XDG_STATE_HOME"]
+
+
 def test_tani_metni_okunur():
     parca = bekci.tani(os.getpid())
     assert "pid" in parca and "State:" in parca, parca

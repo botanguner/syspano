@@ -128,6 +128,29 @@ def pano_pid(haric=()):
     return None
 
 
+def bekci_eslesme(argumanlar):
+    """Bu komut satırı bir **bekçi** süreci mi? (saf fonksiyon)"""
+    if not argumanlar:
+        return False
+    syspano_var = any(a == "syspano" or a.endswith("/syspano") for a in argumanlar)
+    return bool(syspano_var and any(a == "--bekci" for a in argumanlar))
+
+
+def bekci_pid(haric=()):
+    """Çalışan başka bir bekçinin PID'i (yoksa None)."""
+    haric = set(haric) | {os.getpid()}
+    try:
+        pidler = sorted(int(p) for p in os.listdir("/proc") if p.isdigit())
+    except Exception:
+        return None
+    for pid in pidler:
+        if pid in haric:
+            continue
+        if bekci_eslesme(_cmdline(pid)):
+            return pid
+    return None
+
+
 def _log(satir, yol=None):
     yol = yol or gunluk_yolu()
     try:
@@ -204,6 +227,11 @@ def dongu(aralik=None, esik=None, kuru=False, tur_sayisi=None):
     """Bekçi döngüsü. `tur_sayisi` verilirse o kadar tur döner (test için)."""
     aralik = VARSAYILAN_ARALIK if aralik is None else float(aralik)
     esik = VARSAYILAN_ESIK if esik is None else float(esik)
+    if not kuru:
+        baska = bekci_pid()
+        if baska:
+            _log(f"başka bir bekçi zaten çalışıyor (pid {baska}) — çıkılıyor")
+            return "bekci_var"
     tur = 0
     son_karar = "bekle"
     while tur_sayisi is None or tur < tur_sayisi:

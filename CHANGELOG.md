@@ -3,6 +3,14 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.8.2] — 2026-10-09
+
+### Eklendi
+- **Bekçi artık tek kopya çalışır:** ikinci bir bekçi başlatılırsa (elle
+  çalıştırma, oturum açılışı + service birlikte) kendini kapatıp günlüğe
+  "başka bir bekçi zaten çalışıyor (pid N)" yazar; panoyu iki süreç yönetmez.
+- 1 yeni test (toplam **18 dosyada 168 test**).
+
 ## [1.8.1] — 2026-10-09
 
 ### Düzeltildi
