@@ -521,7 +521,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **18 dosyada 168 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **19 dosyada 171 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -586,6 +586,31 @@ python3 arac/olcum.py --hizli     # modülleri art arda (seyreltme görünmez)
 > [!NOTE]
 > Mutlak süreler cihaza göre değişir: Raspberry Pi 4, bu dizüstünden yaklaşık
 > 3–4 kat yavaştır, ama oranlar aynıdır ve seyreltme mantığı orada da geçerlidir.
+
+## Raspberry Pi / kiosk kurulumu
+
+Pi'de panoyu **gözetimsiz** çalıştırmak için tek komut:
+
+```bash
+./kur-pi.sh                 # bekçi + oturum açılışı + kalıcı günlük
+./kur-pi.sh --kuru          # yalnızca ne yapacağını yaz
+./kur-pi.sh --kartlar-ekle pisaglik,loglar
+./kur-pi.sh --geri-al       # yaptıklarını geri al
+```
+
+Ne yapar:
+
+| Adım | Ayrıntı |
+|---|---|
+| **Bekçi** | `syspano --bekci` oturum açılışına eklenir; pano çöker ya da **donarsa** kendiliğinden geri gelir (bkz. [Bekçi](#bekçi-gözetimsiz-panolar)) |
+| **Çift başlatma yok** | labwc kullanılıyorsa eski XDG oturum girdisi kapatılır (`~/.config/labwc/autostart` tek sahip olur) |
+| **Kalıcı günlük** | `journald` 200 MB sınırla kalıcı yapılır: Raspberry Pi OS varsayılanı `Storage=volatile` olduğu için **fiş çekildiğinde günlükler silinir** ve donma nedeni bulunamaz (`--gunluk-yok` ile atlanır) |
+| **Kartlar** | `--kartlar-ekle` ile Pİ SAĞLIĞI, GÜNLÜKLER gibi yeni kartlar yapılandırmaya eklenir |
+
+> [!TIP]
+> Kurulumdan sonra donma benzetimi: `sudo kill -STOP $(pgrep -f 'local/bin/syspano$')`
+> — bekçi kalp atışının bayatladığını görüp panoyu kapatır, tanıyı
+> `~/.local/state/syspano/pano.log`'a yazar ve yeniden başlatır.
 
 ## Ekran görüntüsü
 
@@ -769,7 +794,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 168 test / 18 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 171 test / 19 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 
