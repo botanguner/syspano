@@ -567,6 +567,38 @@ def test_gunluk_goruntuleyici_journal_kaynagi():
         p.kapat()
 
 
+def test_servis_dugmeleri_eyleme_gider():
+    """BAŞLATMA düğmeleri servis modülüne gitmeli; devralmada bildirim çıkmalı."""
+    from syspano import baslatma
+    p = _pano_olustur(kartlar=["cpu"], guncelleme_denetimi=False)
+    if p is None:
+        return
+    gercek = {ad: getattr(baslatma, ad) for ad in
+              ("servis_kur", "servis_eylemi", "servis_durum")}
+    cagrilar = []
+    baslatma.servis_kur = lambda komut=None: (cagrilar.append("kur"),
+                                              (True, "Servis kuruldu"))[1]
+    baslatma.servis_eylemi = lambda eylem: (cagrilar.append(eylem),
+                                            (True, f"{eylem} tamam"))[1]
+    baslatma.servis_durum = lambda taze=False: {"etkin": True, "kurulu": True,
+                                                "durum": "active", "pid": 42}
+    try:
+        p._dugme_isle("servis_kur")
+        assert cagrilar == ["kur"], cagrilar
+        assert "devrediliyor" in p.bildiri, p.bildiri
+        p._dugme_isle("servis_yeniden")
+        assert cagrilar == ["kur", "yeniden"], cagrilar
+        p._dugme_isle("servis_durdur")
+        assert cagrilar[-1] == "durdur" and "kapan" in p.bildiri, p.bildiri
+        baslatma.servis_eylemi = lambda eylem: (False, "systemctl hatası")
+        p._dugme_isle("servis_baslat")
+        assert "hata" in p.bildiri, p.bildiri
+    finally:
+        for ad, fonk in gercek.items():
+            setattr(baslatma, ad, fonk)
+        p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback

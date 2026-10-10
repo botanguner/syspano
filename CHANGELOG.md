@@ -3,7 +3,31 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.11.0] — 2026-10-10
+## [1.12.0] — 2026-10-10
+
+### Eklendi
+- **Ayarlar ekranına "BAŞLATMA" bölümü.** Pano nasıl başlatıldığını ve servis
+  durumunu gösterir; duruma göre düğmeler sunar:
+  - `Başlatma: oturum açılışı (masaüstü)` / `… + bekçi` / `systemd kullanıcı
+    servisi · active · pid 4242` / `elle`,
+  - servis kurulu değilse **Servisi kur (systemd)** — birim yazılır,
+    etkinleştirilir, başlatılır ve **oturum açılışı girdisi kapatılır** (çift
+    pano olmasın); Raspberry Pi'de birim **bekçiyle** kurulur
+    (`ExecStart=… --bekci`),
+  - servis kuruluysa **Yeniden başlat** + durumuna göre **Durdur**/**Başlat**.
+  - Servis devraldığında çalışan pano kendini kapatır (iki pano üst üste
+    gelmesin); başarısız `systemctl` çağrıları bildirimle bildirilir, pano
+    çalışmaya devam eder.
+  - Durum sorgusu 5 saniyede bir önbelleğe alınır (ayar ekranı saniyede bir
+    çizilse bile her karede `systemctl` çağrılmaz).
+- `baslatma.py`: yöntem/durum tespiti, birim içeriği üretimi (depo şablonundan
+  bağımsız — kurulu pakette de çalışır), kur/başlat/durdur/yeniden başlat.
+- 9 yeni test (toplam **21 dosyada 193 test**): elle/oturum/servis durumları,
+  düğme kümeleri, birimin yazılması ve oturum girdisinin kapatılması,
+  `start/stop/restart` çağrıları (durdurmada `--no-block`), hata yolu, bekçili
+  birim içeriği, ayar ekranında bölümün görünmesi ve panoda düğme akışı.
+
+## [1.11.0] — 2026-10-10 — 2026-10-10
 
 ### Eklendi
 - **Panel bağlantısı koruması (bekçi).** Pi'nin resmî 7" panelinde DSI

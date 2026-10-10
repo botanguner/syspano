@@ -215,6 +215,19 @@ def yerlesim(tasarim_g, tasarim_y, ayarlar, cikislar=(), durum=None):
         satir_sayisi = -(-len(adlar) // n_kolon)
         y += satir_sayisi * (DOKUNMA + 6) + BOSLUK
 
+    # ── başlatma yöntemi ──
+    baslatma = durum.get("baslatma") or {}
+    if baslatma.get("metin"):
+        baslik("BAŞLATMA")
+        durum_satiri(baslatma["metin"], baslatma.get("renk") or "soluk")
+        etiketler = {"servis_kur": "Servisi kur (systemd)",
+                     "servis_baslat": "Servisi başlat",
+                     "servis_durdur": "Servisi durdur",
+                     "servis_yeniden": "Servisi yeniden başlat"}
+        for eylem in baslatma.get("eylemler") or []:
+            if eylem in etiketler:
+                dugme_satiri(eylem, etiketler[eylem])
+
     # ── sürüm / güncelleme ──
     baslik("SÜRÜM")
     aciklama(durum.get("surum_metni") or "")

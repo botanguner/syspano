@@ -585,6 +585,7 @@ class Pano:
 
     def _ayar_durumu(self):
         from .. import __version__ as calisan
+        from .. import baslatma
         from .. import guncelleme
         kart_bilgi = {ad: yerlesim.KART_BILGI[ad]["baslik"]
                       for ad in sorted(yerlesim.KART_BILGI,
@@ -605,6 +606,7 @@ class Pano:
         return {"kart_bilgi": kart_bilgi,
                 "surum_metni": surum_metni,
                 "guncelleme": {"metin": metin, "renk": renk},
+                "baslatma": dict(zip(("metin", "renk", "eylemler"), baslatma.durum_metni())),
                 # küçük ekranda istenen ölçek kırpılır: ayar ekranı bunu söyler
                 "olcek_istenen": float(istenen_olcek) if istenen_olcek else 0.0,
                 "olcek_etkin": round(self.S, 2)}
@@ -646,6 +648,39 @@ class Pano:
             self._yeniden_baslat()
         elif kid == "sifirla":
             self._ayarlari_sifirla()
+        elif kid in ("servis_kur", "servis_baslat", "servis_durdur", "servis_yeniden"):
+            self._servis_isle(kid)
+
+    def _servis_isle(self, kid):
+        """Başlatma yöntemi düğmeleri: servisi kur / başlat / durdur / yeniden başlat.
+
+        Servis devraldığında bu pano kapanır — aynı anda iki pano görünmesin.
+        """
+        from .. import baslatma
+        if kid == "servis_kur":
+            basarili, mesaj = baslatma.servis_kur()
+        else:
+            eylem = {"servis_baslat": "baslat", "servis_durdur": "durdur",
+                     "servis_yeniden": "yeniden"}[kid]
+            basarili, mesaj = baslatma.servis_eylemi(eylem)
+        self._son_imza = None
+        if not basarili:
+            self._bildir(mesaj, 8)
+            self.ciz()
+            return
+        if kid == "servis_durdur":
+            self._bildir(mesaj + " — pano kapanıyor", 5)
+            self.ciz()
+            return
+        # devralma: servis gerçekten çalışıyorsa bu panoyu kapat
+        durum = baslatma.servis_durum(taze=True)
+        if durum.get("etkin"):
+            self._bildir(mesaj + " · pano servise devrediliyor…", 5)
+            self.ciz()
+            self.kok.after(2500, self.kapat)
+        else:
+            self._bildir(mesaj, 8)
+            self.ciz()
 
     def _ayar_uygula(self, kid, deger):
         a = self.ayarlar

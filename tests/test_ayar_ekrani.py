@@ -238,6 +238,30 @@ def test_olcek_kirpildiginda_uyarir():
     assert not any("en fazla" in m for m in metinler2), metinler2
 
 
+def test_baslatma_bolumu_duruma_gore():
+    """BAŞLATMA bölümü: durum satırı + yönteme uygun düğmeler görünmeli."""
+    durum = dict(DURUM, baslatma={"metin": "Başlatma: oturum açılışı (masaüstü)",
+                                  "renk": "yesil", "eylemler": ["servis_kur"]})
+    plan = A.yerlesim(1200, 700, AYARLAR, [], durum)
+    basliklar = [k["etiket"] for k in plan["kutular"] if k["tur"] == "baslik"]
+    assert "BAŞLATMA" in basliklar, basliklar
+    assert any(k["tur"] == "durum" and "Başlatma" in k["etiket"]
+               for k in plan["kutular"]), "başlatma durum satırı yok"
+    dugmeler = [k["id"] for k in plan["kutular"] if k["tur"] == "dugme"]
+    assert "servis_kur" in dugmeler, dugmeler
+
+    durum = dict(DURUM, baslatma={"metin": "Başlatma: systemd kullanıcı servisi · active",
+                                  "renk": "yesil",
+                                  "eylemler": ["servis_yeniden", "servis_durdur"]})
+    plan = A.yerlesim(1200, 700, AYARLAR, [], durum)
+    dugmeler = [k["id"] for k in plan["kutular"] if k["tur"] == "dugme"]
+    assert "servis_durdur" in dugmeler and "servis_yeniden" in dugmeler, dugmeler
+    assert "servis_kur" not in dugmeler, dugmeler
+
+    plan = A.yerlesim(1200, 700, AYARLAR, [], DURUM)
+    assert "BAŞLATMA" not in [k["etiket"] for k in plan["kutular"] if k["tur"] == "baslik"]
+
+
 def test_cizim_icerik_icinde():
     """Tüm ayar ekranı, ölçekli içerik alanının dışına taşmamalı."""
     kok, cv, cek = _cekim_hazirla(olcek=1.7)
