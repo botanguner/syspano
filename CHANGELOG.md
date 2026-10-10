@@ -3,6 +3,41 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.10.0] — 2026-10-09
+
+### Eklendi
+- **Kurulum artık "panoyu nasıl başlatmak istersiniz?" diye soruyor.**
+  `install.sh` üç seçenek sunar ve seçime göre ayarı kendisi yapar:
+  1. **Oturum açılışında (masaüstü)** *(varsayılan)* —
+     `~/.config/autostart/syspano.desktop`,
+  2. **systemd kullanıcı servisi** — `~/.config/systemd/user/syspano.service`
+     + `systemctl --user enable --now syspano`,
+  3. **Yalnızca elle** — hiçbir otomatik başlatma kurulmaz.
+  Raspberry Pi'de 1 ve 2 numaralı seçenekler **bekçiyle** kurulur
+  (`syspano --bekci`): pano donar ya da çökerse geri gelir. Tam Pi kurulumu için
+  betik `./kur-pi.sh` adresini de gösterir.
+- Yeni seçenekler: `--baslatma oturum|servis|manuel`, `--sor` (etkileşimli
+  olmasa bile sor), `--sadece-baslatma` (paketi kurmadan yalnız başlatma ayarı).
+  Eski `--servis` ve `--autostart-yok` bayrakları geriye dönük uyumlu
+  (`= --baslatma servis|manuel`).
+- Etkileşimli olmayan çalıştırmalarda (CI, `curl | bash`) **soru sorulmaz**:
+  eski davranış korunur (oturum açılışı) ve durum açıkça yazılır. `systemctl`
+  yoksa/başarısızsa kurulum çökmüyor, uyarıyla devam ediyor.
+
+### Düzeltildi
+- **Wiki'deki otomatik başlatma komutu yanlıştı:** Kurulum sayfası
+  `cp ~/syspano/desktop/syspano-autostart.desktop …` diyordu; dosya depoya göre
+  yolda ve şablon `Exec=@KOMUT@` içerdiği için düz kopyalamak **bozuk bir
+  `.desktop`** üretiyordu. Sayfa yeniden yazıldı: doğru yol, `sed` ile yer
+  tutucuyu dolduran komut ve `./kur-pi.sh` işaret ediliyor.
+
+### Test
+- 7 yeni test (`tests/test_install.py`): yardım metni, oturum girdisinin
+  `Exec` yolunu **doldurduğu** (`@KOMUT@` kalmıyor), manuel seçeneğin hiçbir şey
+  yazmadığı, servis biriminin yazıldığı (`systemctl` yokken çökmemesi), eski
+  bayrakların uyumu, `--sor` ile boru girdisinden seçim (2 → servis, 3 → manuel)
+  ve etkileşimsiz varsayılan → toplam **20 dosyada 179 test**.
+
 ## [1.9.1] — 2026-10-09
 
 ### Düzeltildi
