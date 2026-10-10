@@ -39,6 +39,7 @@ BOSLUK = 14        # kartlar arası boşluk
 KENAR = 14         # ekran kenarı boşluğu
 MIN_SUTUN_G = 250  # bir sütunun en az genişliği (tasarım birimi)
 MIN_SATIR_Y = 78   # bir satırın en az yüksekliği (tasarım birimi)
+AZAMI_GIZLEME = 3  # yer darlığında en fazla bu kadar kart gizlenir; yetmezse kaydırılır
 ALT_BILGI = 20     # alt bilgi şeridi
 
 
@@ -136,19 +137,31 @@ def planla(tasarim_g, tasarim_y, aktif_kartlar=None, otomatik=True):
     satirlar = _satirlara_yerlestir(aktif, n)
     yukler, sigar = _olcu(satirlar, kullanilabilir)
 
-    # yer yetmiyorsa en önemsiz kartlardan başlayarak düşür (birikimli)
-    if otomatik:
-        dusen = []
+    # Yer yetmiyorsa kart düşürmeyi **dene**; ama düşürmek sığdırmayı
+    # başaramıyorsa hiç gizleme ve panoyu kaydırılabilir yap. Aksi hâlde küçük
+    # ekranlarda kartların çoğu gizleniyor ve gizleme sığdırmadığı için kaydırma
+    # da kapalı kalıyordu (Pi'de 14 karttan 12'si görünmez oluyordu ve
+    # kaydırılamıyordu — kullanıcı bildirdi).
+    if otomatik and not sigar:
+        tam_aktif, tam_satirlar, tam_yukler = aktif, satirlar, yukler
+        dusen, bulundu = [], False
         for ad in _ONCELIK_SIRASI:
-            if sigar or len(aktif) <= 2:
+            # En fazla AZAMI_GIZLEME kart gizlenir: çoğunu gizlemek yerine pano
+            # kaydırılabilir olur, böylece bütün kartlar erişilebilir kalır.
+            if len(aktif) <= 2 or len(dusen) >= AZAMI_GIZLEME:
                 break
             if ad not in aktif:
                 continue
-            dusen.append(ad)
-            aday = [k for k in aktif if k not in dusen]
+            aday = [k for k in aktif if k not in dusen and k != ad]
             s2 = _satirlara_yerlestir(aday, n)
             yukler2, sigar2 = _olcu(s2, kullanilabilir)
-            aktif, satirlar, yukler, sigar = aday, s2, yukler2, sigar2
+            if sigar2:                      # bu kadar gizlemek sığdırdı
+                aktif, satirlar, yukler, sigar = aday, s2, yukler2, True
+                bulundu = True
+                break
+            dusen.append(ad)                # yetmedi: bir sonrakini de dene
+        if not bulundu:
+            aktif, satirlar, yukler = tam_aktif, tam_satirlar, tam_yukler
 
     kaydirilir = False
     if not sigar:

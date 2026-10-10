@@ -75,6 +75,25 @@ def test_yer_varsa_gizlenmez():
     assert not sonuc["kaydirilir"]
 
 
+def test_gizleme_sinirli_ve_kaydirma_acik():
+    """Yer darlığında en fazla AZAMI_GIZLEME kart gizlenir; yetmezse kaydırılır.
+
+    Pi'de (533×320) 14 karttan 12'si gizleniyor ve kaydırma da kapalı kalıyordu
+    → servisler kartının altı görünmüyor, kaydırılamıyordu (kullanıcı bildirdi).
+    """
+    for tg, ty, aciklama in ORNEKLER:
+        s = Y.planla(tg, ty)
+        assert len(s["gizli"]) <= Y.AZAMI_GIZLEME, \
+            f"{aciklama}: {len(s['gizli'])} kart gizlendi"
+        if s["gizli"]:
+            assert not s["kaydirilir"], \
+                f"{aciklama}: gizleme varken kaydırma da açık (gereksiz gizleme)"
+    # küçük ekranda bütün kartlar kalır ve pano kaydırılabilir olur
+    s = Y.planla(533, 320)
+    assert len(s["kartlar"]) == len(Y.KART_BILGI), s["gizli"]
+    assert s["kaydirilir"] and s["icerik_y"] > 320
+
+
 def test_kucukte_kart_duser():
     """Küçük ekranda otomatik mod kart sayısını azaltmalı (ya da kaydırmalı)."""
     sonuc = _kontrol(480, 320, "küçük")
