@@ -619,6 +619,7 @@ class Pano:
         from .. import __version__ as calisan
         from .. import baslatma
         from .. import guncelleme
+        from ..cihaz import yedek as yedek_modul
         kart_bilgi = {ad: yerlesim.KART_BILGI[ad]["baslik"]
                       for ad in sorted(yerlesim.KART_BILGI,
                                        key=lambda k: yerlesim.KART_BILGI[k]["oncelik"],
@@ -639,6 +640,8 @@ class Pano:
                 "surum_metni": surum_metni,
                 "guncelleme": {"metin": metin, "renk": renk},
                 "baslatma": dict(zip(("metin", "renk", "eylemler"), baslatma.durum_metni())),
+                "yedek": dict(zip(("satirlar", "eylemler"),
+                                  yedek_modul.durum_metni(self.ayarlar))),
                 # küçük ekranda istenen ölçek kırpılır: ayar ekranı bunu söyler
                 "olcek_istenen": float(istenen_olcek) if istenen_olcek else 0.0,
                 "olcek_etkin": round(self.S, 2)}
@@ -682,6 +685,8 @@ class Pano:
             self._ayarlari_sifirla()
         elif kid in ("servis_kur", "servis_baslat", "servis_durdur", "servis_yeniden"):
             self._servis_isle(kid)
+        elif kid in ("yedek_simdi", "zamanlayici_ac", "zamanlayici_kapat"):
+            self._yedek_isle(kid)
 
     def servis_listesi_ac(self):
         """SERVİSLER kartındaki "+N daha" satırı: tam liste görünümü."""
@@ -731,6 +736,14 @@ class Pano:
                    s.get("durum") == "failed", "e")
             kartlar_modul.TIKLANABILIR.append((("log", s.get("ad")),
                                               (0, sy, self.tasarim_g, 32)))
+
+    def _yedek_isle(self, kid):
+        """YEDEKLEME bölümü düğmeleri: şimdi yedekle / zamanlayıcı aç-kapat."""
+        from ..cihaz import yedek as yedek_modul
+        basarili, mesaj = yedek_modul.eylem(kid, self.ayarlar)
+        self._son_imza = None          # durum satırları tazelensin
+        self._bildir(mesaj, 8)
+        self.ciz()
 
     def _servis_isle(self, kid):
         """Başlatma yöntemi düğmeleri: servisi kur / başlat / durdur / yeniden başlat.

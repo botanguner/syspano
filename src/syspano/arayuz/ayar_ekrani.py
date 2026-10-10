@@ -215,6 +215,19 @@ def yerlesim(tasarim_g, tasarim_y, ayarlar, cikislar=(), durum=None):
         satir_sayisi = -(-len(adlar) // n_kolon)
         y += satir_sayisi * (DOKUNMA + 6) + BOSLUK
 
+    # ── yedekleme ──
+    yedek = durum.get("yedek") or {}
+    if yedek.get("satirlar"):
+        baslik("YEDEKLEME")
+        for metin, renk in yedek["satirlar"]:
+            durum_satiri(metin, renk)
+        yedek_etiket = {"yedek_simdi": "Şimdi yedekle",
+                        "zamanlayici_ac": "Otomatik yedeği aç",
+                        "zamanlayici_kapat": "Otomatik yedeği kapat"}
+        for eylem in yedek.get("eylemler") or []:
+            if eylem in yedek_etiket:
+                dugme_satiri(eylem, yedek_etiket[eylem])
+
     # ── başlatma yöntemi ──
     baslatma = durum.get("baslatma") or {}
     if baslatma.get("metin"):

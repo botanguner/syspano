@@ -312,6 +312,7 @@ python3 -m pip install --user --upgrade git+https://github.com/botanguner/syspan
 | **Tepsi simgesi** | açık/kapalı | **Yeniden başlatma gerekir** |
 | **Kartları otomatik gizle** | açık/kapalı | Canlı |
 | **Kartlar** | 13 kart için anahtar | Canlı |
+| **Yedekleme** | Son yedek durumu (başarılı/başarısız/sürüyor), sıradaki çalışma, **Şimdi yedekle**, **Otomatik yedeği aç/kapat** | Anında |
 | **Başlatma** | Yöntem ve durumu görünür; servis kurulu değilse **kur**, çalışıyorsa **durdur / yeniden başlat** | Anında |
 | **Sürüm** | denetle / güncelle / yeniden başlat / sıfırla | — |
 
@@ -535,7 +536,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **22 dosyada 203 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **23 dosyada 209 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -822,7 +823,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 203 test / 22 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 209 test / 23 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 
