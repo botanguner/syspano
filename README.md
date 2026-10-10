@@ -69,13 +69,25 @@ cd syspano
 ```
 
 `install.sh` şunları yapar: tkinter'ı denetler, paketi pipx ya da
-`pip install --user` ile kurar ve oturum açılışı girdisi ekler.
+`pip install --user` ile kurar ve **panoyu nasıl başlatmak istediğinizi sorar**:
+
+| Seçim | Ne kurulur |
+|---|---|
+| **1) Oturum açılışında (masaüstü)** *(varsayılan)* | `~/.config/autostart/syspano.desktop` — oturum açılınca pano gelir |
+| **2) systemd kullanıcı servisi** | `~/.config/systemd/user/syspano.service` — `systemctl --user enable --now syspano`, çökerse systemd yeniden başlatır |
+| **3) Yalnızca elle** | Hiçbir otomatik başlatma kurulmaz; panoyu siz başlatırsınız |
+
+Raspberry Pi'de 1 ve 2 numaralı seçenekler **bekçiyle** kurulur (`syspano --bekci`):
+pano donar ya da çökerse kendiliğinden geri gelir.
 
 ```bash
-./install.sh --paket       # eksik sistem paketini kendisi kurmayı dener (sudo)
-./install.sh --servis      # oturum açılışı yerine systemd kullanıcı servisi
-./install.sh --sistem      # sistem geneline kur (sudo)
-./install.sh --autostart-yok
+./install.sh --paket                     # eksik sistem paketini kendisi kurmayı dener (sudo)
+./install.sh --baslatma oturum           # sormadan seç (oturum | servis | manuel)
+./install.sh --sadece-baslatma --baslatma servis   # paketi kurmadan yalnız başlatma ayarı
+./install.sh --sor                       # etkileşimli olmasa bile sor
+./install.sh --sistem                    # sistem geneline kur (sudo)
+./install.sh --servis                    # (eski) = --baslatma servis
+./install.sh --autostart-yok             # (eski) = --baslatma manuel
 ```
 
 ### 2. Elle
@@ -521,7 +533,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **19 dosyada 172 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **20 dosyada 179 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -794,7 +806,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 172 test / 19 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 179 test / 20 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 
