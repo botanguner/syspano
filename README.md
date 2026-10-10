@@ -397,7 +397,7 @@ Kartların yüksekliği sabit değildir; satırlar mevcut yüksekliği ağırlı
 göre paylaşır. Yer yetmezse:
 
 1. Satırlar **eşit** yüksekliğe geçer (küçük ekranda daha çok satır sığar),
-2. hâlâ sığmıyorsa **düşük öncelikli kartlar** gizlenir (önce `sistem`, sonra
+2. hâlâ sığmıyorsa **en fazla 3 düşük öncelikli kart** gizlenir (önce `sistem`, sonra
    `yedek`, `süreçler`, `geçmiş` …; `CPU` ve `BELLEK` her zaman kalır),
 3. yine sığmazsa pano **kaydırılabilir** olur (tekerlek/sürükleme).
 
@@ -535,7 +535,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **22 dosyada 201 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **22 dosyada 202 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -822,7 +822,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 201 test / 22 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 202 test / 22 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 
