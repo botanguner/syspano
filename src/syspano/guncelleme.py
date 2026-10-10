@@ -432,8 +432,9 @@ def durum_metni(denetim=None, surec=None, simdi=None, denetim_suruyor=False,
         return (f"⚠ Yeniden kurulum gerekli (depo {denetim.get('depo_surum') or '?'})",
                 "sari")
     if denetim.get("yeni"):
-        hedef = denetim.get("depo_surum") or denetim.get("uzak") or "?"
-        return (f"⬆ Yeni sürüm var: {hedef} — «Güncelle»ye dokunun", "sari")
+        # panelde kısa tutulur (küçük ekranda satır kırpılmasın): konu gösterilmez
+        metin = yeni_metni(denetim, konu_goster=False)
+        return (f"⬆ {metin[0].upper() + metin[1:]} — «Güncelle»ye dokunun", "sari")
     return (f"✓ Güncel · son denetim {_yas_metni(simdi - float(denetim['zaman']))}",
             "yesil")
 
@@ -515,6 +516,30 @@ def guncelle(url=None, tekrar_kur=True):
             "yeniden_baslat": True}
 
 
+def yeni_metni(denetim, konu_goster=True):
+    """'Yeni sürüm var: X' ya da 'yeni commit' metni (sürüm aynı olabilir).
+
+    Denetim `geride > 0` (yeni commit) durumunu "yeni sürüm" diye yazdığında
+    sürüm numarası değişmemişse ekranda "Yeni sürüm var: 1.13.1" gibi çelişkili
+    bir satır çıkıyordu (kullanıcı bildirdi). Sürüm aynıysa commit sayısı ve son
+    commit konusu yazılır.
+    """
+    yerel = denetim.get("yerel") or __version__
+    hedef = denetim.get("depo_surum") or denetim.get("uzak") or ""
+    geride = int(denetim.get("geride") or 0)
+    if hedef and surum_karsilastir(hedef, yerel) > 0:
+        return f"yeni sürüm var: {hedef}"
+    ayrinti = f"{geride} yeni commit" if geride else "yeni değişiklikler"
+    if not konu_goster:
+        return f"yeni değişiklikler var ({ayrinti})"
+    konu = " ".join((denetim.get("mesaj") or "").split())
+    if konu:
+        parcalar = konu.split(" ", 1)
+        konu = parcalar[1] if len(parcalar) == 2 and len(parcalar[0]) >= 7 else konu
+        return f"yeni değişiklikler var ({ayrinti}) · son: {konu[:60]}"
+    return f"yeni değişiklikler var ({ayrinti})"
+
+
 def metin_ozet(baslik_genisligi=0):
     """Panoda/terminalde gösterilecek tek satırlık durum."""
     son = denetim_oku()
@@ -526,6 +551,5 @@ def metin_ozet(baslik_genisligi=0):
     if son.get("hata"):
         return f"denetlenemedi: {son['hata']}"
     if son.get("yeni"):
-        uzak = f" (uzak {son['uzak']})" if son.get("uzak") else ""
-        return f"yeni sürüm var{uzak} · yerel {son['yerel']}"
+        return f"{yeni_metni(son)} · yerel {son['yerel']}"
     return f"güncel · yerel {son['yerel']}"

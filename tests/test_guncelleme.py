@@ -81,7 +81,7 @@ def test_ozet_metni():
             guncelleme._denetim_yaz({"zaman": 1, "yeni": False, "yerel": "1.0.1"})
             assert "güncel" in guncelleme.metin_ozet()
             guncelleme._denetim_yaz({"zaman": 1, "yeni": True, "yerel": "1.0.1",
-                                     "uzak": "v1.0.2"})
+                                     "uzak": "v1.0.2", "depo_surum": "v1.0.2"})
             ozet = guncelleme.metin_ozet()
             assert "yeni sürüm" in ozet and "v1.0.2" in ozet
             guncelleme._denetim_yaz({"zaman": 1, "yeni": True, "yerel": "1.0.0",
@@ -133,9 +133,20 @@ def test_durum_metni_asamalari():
     assert "Denetlenemedi" in metin and "ağ yok" in metin and renk == "kirmizi"
     # 7) yeni sürüm var
     metin, renk = guncelleme.durum_metni(
-        denetim={"zaman": simdi - 10, "yeni": True, "depo_surum": "1.9.0"},
+        denetim={"zaman": simdi - 10, "yeni": True, "depo_surum": "1.9.0",
+                 "yerel": "1.8.0", "geride": 4},
         surec={}, simdi=simdi, baslangic=0)
-    assert "Yeni sürüm var" in metin and "1.9.0" in metin and renk == "sari"
+    assert "yeni sürüm var" in metin.lower() and "1.9.0" in metin and renk == "sari"
+    # sürüm AYNI ama yeni commit'ler varsa "yeni sürüm var: 1.9.0" gibi çelişkili
+    # bir satır çıkmamalı (kullanıcı bildirdi)
+    metin2, renk2 = guncelleme.durum_metni(
+        denetim={"zaman": simdi - 10, "yeni": True, "yerel": "1.9.0",
+                 "depo_surum": "1.9.0", "geride": 2,
+                 "mesaj": "abcdef1 Tepsi simgeleri birikmesi düzeltildi"},
+        surec={}, simdi=simdi, baslangic=0)
+    assert "yeni değişiklikler var" in metin2.lower() and "2 yeni commit" in metin2, metin2
+    assert "yeni sürüm var" not in metin2.lower(), metin2
+    assert renk2 == "sari"
     # 8) güncel
     metin, renk = guncelleme.durum_metni(
         denetim={"zaman": simdi - 600, "yeni": False}, surec={}, simdi=simdi,
