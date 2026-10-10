@@ -3,7 +3,19 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.13.1] — 2026-10-10
+## [1.13.2] — 2026-10-10
+
+### Düzeltildi
+- **Tepsi simgeleri birikiyordu.** Her pano yeniden başlatmasında yeni bir
+  `syspano.tepsi` süreci başlıyor, eskisi ölmüyordu; kullanıcının görev
+  çubuğunda saatin yanında **6 simge** birikmişti (bildirildi). İki koruma
+  eklendi:
+  - **Tek kopya:** başka bir tepsi çalışıyorsa yenisi hemen çıkar.
+  - **Yetim denetimi:** tepsi, ebeveyn panonun PID'ini hatırlar; pano ölürse
+    (SIGKILL'de bile) 2 saniye içinde kendini kapatır.
+  - 2 yeni test (toplam **22 dosyada 199 test**; PySide6 yoksa atlanır).
+
+## [1.13.1] — 2026-10-10 — 2026-10-10
 
 ### Düzeltildi
 - **"Güncelleme tamam — Panoyu yeniden başlatın" uyarısı kalıcı oluyordu.**
