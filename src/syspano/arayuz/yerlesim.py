@@ -16,20 +16,20 @@ dengeli görünür.
 #   yuk    : satır yüksekliği ağırlığı (boyutsuz)
 #   oncelik: yer yetmediğinde düşürme sırası (küçük = önce düşer)
 KART_BILGI = {
-    "cpu":      {"baslik": "CPU",                 "sutun": 1, "min": 120, "dogal": 150, "oncelik": 100},
-    "bellek":   {"baslik": "BELLEK",              "sutun": 1, "min": 110, "dogal": 140, "oncelik": 99},
-    "sicaklik": {"baslik": "SICAKLIK / FAN",      "sutun": 1, "min": 100, "dogal": 130, "oncelik": 95},
-    "pisaglik": {"baslik": "Pİ SAĞLIĞI",          "sutun": 1, "min": 95, "dogal": 120, "oncelik": 82},
-    "pil":      {"baslik": "PİL",                 "sutun": 1, "min": 78, "dogal": 96, "oncelik": 84},
-    "cekirdek": {"baslik": "ÇEKİRDEK KULLANIMI",  "sutun": 2, "min": 85, "dogal": 98, "oncelik": 80},
-    "gecmis":   {"baslik": "GEÇMİŞ (son 4 dk)",   "sutun": 2, "min": 95, "dogal": 125, "oncelik": 70},
-    "gpu":      {"baslik": "GPU",                 "sutun": 1, "min": 110, "dogal": 150, "oncelik": 66},
-    "disk_ag":  {"baslik": "DİSK / AĞ",           "sutun": 1, "min": 115, "dogal": 165, "oncelik": 76},
-    "surecler": {"baslik": "SÜREÇLER",            "sutun": 1, "min": 110, "dogal": 175, "oncelik": 55},
-    "servisler": {"baslik": "SERVİSLER",          "sutun": 1, "min": 110, "dogal": 175, "oncelik": 85},
-    "loglar":   {"baslik": "GÜNLÜKLER",           "sutun": 1, "min": 105, "dogal": 160, "oncelik": 58},
-    "yedek":    {"baslik": "YEDEK",               "sutun": 1, "min": 100, "dogal": 135, "oncelik": 40},
-    "sistem":   {"baslik": "SİSTEM",              "sutun": 1, "min": 105, "dogal": 140, "oncelik": 30},
+    "cpu":      {"baslik": "CPU",                 "sutun": 1, "yuk": 1.00, "oncelik": 100},
+    "bellek":   {"baslik": "BELLEK",              "sutun": 1, "yuk": 1.00, "oncelik": 99},
+    "sicaklik": {"baslik": "SICAKLIK / FAN",      "sutun": 1, "yuk": 1.00, "oncelik": 95},
+    "pisaglik": {"baslik": "Pİ SAĞLIĞI",          "sutun": 1, "yuk": 1.00, "oncelik": 82},
+    "pil":      {"baslik": "PİL",                 "sutun": 1, "yuk": 1.00, "oncelik": 84},
+    "cekirdek": {"baslik": "ÇEKİRDEK KULLANIMI",  "sutun": 2, "yuk": 0.72, "oncelik": 80},
+    "gecmis":   {"baslik": "GEÇMİŞ (son 4 dk)",   "sutun": 2, "yuk": 0.72, "oncelik": 70},
+    "gpu":      {"baslik": "GPU",                 "sutun": 1, "yuk": 1.45, "oncelik": 66},
+    "disk_ag":  {"baslik": "DİSK / AĞ",           "sutun": 1, "yuk": 1.45, "oncelik": 76},
+    "surecler": {"baslik": "SÜREÇLER",            "sutun": 1, "yuk": 1.45, "oncelik": 55},
+    "servisler": {"baslik": "SERVİSLER",          "sutun": 1, "yuk": 1.45, "oncelik": 85},
+    "loglar":   {"baslik": "GÜNLÜKLER",           "sutun": 1, "yuk": 1.45, "oncelik": 58},
+    "yedek":    {"baslik": "YEDEK",               "sutun": 1, "yuk": 1.45, "oncelik": 40},
+    "sistem":   {"baslik": "SİSTEM",              "sutun": 1, "yuk": 0.90, "oncelik": 30},
 }
 
 _ONCELIK_SIRASI = sorted(KART_BILGI, key=lambda k: KART_BILGI[k]["oncelik"])
@@ -84,37 +84,33 @@ def _satiri_yay(satir, n):
     return satir
 
 
-def _dogal(satir):
-    """Satırın doğal yüksekliği: içindeki kartların içerik yüksekliğinin en büyüğü."""
-    return max(KART_BILGI[k].get("dogal", 120) for k, _ in satir)
-
-
-def _asgari(satir):
-    """Satırın alt sınırı: kartların kendi alt sınırlarının en büyüğü."""
-    return max(KART_BILGI[k].get("min", MIN_SATIR_Y) for k, _ in satir)
-
-
 def _olcu(satirlar, kullanilabilir):
-    """Satır yükseklikleri: **içeriğe göre** doğal yükseklik, sığmazsa ölçeklenir.
+    """Satır yüksekliklerini hesaplar. (yukler, sigar) döner.
 
-    Eskiden tek bir birim katsayısı kullanılıyordu; bu yüzden benzer ağırlıklı
-    kartlar (ör. pil ile CPU) aynı yüksekliği alıyordu. Artık her kartın
-    içeriğine göre bir doğal yüksekliği ve bir alt sınırı var: pil kısa kalır,
-    süreç/servis listeleri uzar. Yer darsa doğal yükseklikler orantılı küçülür
-    ama alt sınırların altına inmez; alt sınırlar bile sığmıyorsa `sigar=False`
-    döner (çağıran önemsiz kartları gizler ya da panoyu kaydırılabilir yapar).
+    Önce kart ağırlıklarına göre orantılı dağıtım denenir; hiçbir satır en az
+    yüksekliğin altına inmiyorsa kullanılır. Sığmazsa tüm satırlar **eşit**
+    yükseklikte dağıtılır — küçük ekranlarda daha çok satır sığdırır.
     """
-    # satır aralıkları (BOSLUK) da yer kaplar; hesaba katılmazsa içerik taşar
-    kullanilabilir = max(MIN_SATIR_Y, kullanilabilir - len(satirlar) * BOSLUK)
-    dogallar = [_dogal(s) for s in satirlar]
-    asgariler = [_asgari(s) for s in satirlar]
-    toplam_d, toplam_a = sum(dogallar), sum(asgariler)
-    if toplam_a > kullanilabilir and len(satirlar) > 1:
-        return dogallar, False
-    # büyük ekranda boşluk kalmasın: doğal yükseklik %60'a kadar büyür
-    olcek = min(1.6, kullanilabilir / toplam_d) if toplam_d else 1.0
-    yukler = [max(a, d * olcek) for d, a in zip(dogallar, asgariler)]
-    return yukler, sum(yukler) <= kullanilabilir + 0.5
+    n_satir = len(satirlar)
+    if not n_satir:
+        return [], False
+    aralik = BOSLUK * (n_satir - 1)
+    yer = kullanilabilir - aralik
+
+    agirlikli = [max(KART_BILGI[k]["yuk"] for k, _ in s) for s in satirlar]
+    secenekler = [agirlikli, [1.0] * n_satir]
+
+    en_iyi = None
+    for agirliklar in secenekler:
+        toplam = sum(agirliklar) or 1.0
+        birim = yer / toplam
+        yukler = [a * birim for a in agirliklar]
+        if birim > 0 and min(yukler) >= MIN_SATIR_Y:
+            return yukler, True
+        olcut = min(yukler) if yukler else 0
+        if en_iyi is None or olcut > en_iyi[0]:
+            en_iyi = (olcut, yukler)
+    return (en_iyi[1] if en_iyi else []), False
 
 
 def planla(tasarim_g, tasarim_y, aktif_kartlar=None, otomatik=True):
@@ -158,7 +154,8 @@ def planla(tasarim_g, tasarim_y, aktif_kartlar=None, otomatik=True):
     if not sigar:
         kaydirilir = True
         # sabit (kaydırılabilir) yükseklik: en küçük satır MIN_SATIR_Y olsun
-        yukler = [_dogal(s) for s in satirlar]      # içeriğe göre doğal yükseklik
+        birim = MIN_SATIR_Y / min(KART_BILGI[k]["yuk"] for s in satirlar for k, _ in s)
+        yukler = [max(KART_BILGI[k]["yuk"] for k, _ in s) * birim for s in satirlar]
 
     kartlar = {}
     y = UST + BOSLUK
