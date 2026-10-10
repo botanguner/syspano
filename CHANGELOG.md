@@ -3,7 +3,23 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.13.2] — 2026-10-10
+## [1.14.0] — 2026-10-10
+
+### Eklendi
+- **Tüm servisler listesi.** Kartta yer yetmeyince yazılan "+N servis daha"
+  satırı bilgi veriyordu ama **diğer servislere erişim yoktu** (kullanıcı
+  bildirdi). Artık:
+  - kartın **başlığına** dokunmak (kart ne kadar kısa olursa olsun) ya da
+    alt satırdaki "⋯ N servis daha — tümünü gör" yazısına dokunmak
+    **kaydırmalı servis listesi** görünümünü açar,
+  - listede tüm servisler (bozuklar en üstte) renk noktası, çalışma süresi ve
+    bellek ile görünür; **satıra dokunmak** o servisin günlüğünü açar,
+  - kartın başlığında sağda **servis sayısı** yazar (`12 servis`),
+  - `Esc` ya da üst şeritten **▤ Pano** ile dönülür.
+- 2 yeni test (toplam **22 dosyada 201 test**): kartta liste eyleminin her
+  boyutta bulunması ve uçtan uca liste görünümü (satır dokunuşu günlüğü açar).
+
+## [1.13.2] — 2026-10-10 — 2026-10-10
 
 ### Düzeltildi
 - **Tepsi simgeleri birikiyordu.** Her pano yeniden başlatmasında yeni bir

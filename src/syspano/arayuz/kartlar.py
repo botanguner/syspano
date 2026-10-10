@@ -459,6 +459,11 @@ def _servis_sirala(birimler):
                                            b.get("etiket", "")))
 
 
+def kalan_sayi(birimler, sigar):
+    """Sığmayan öğe sayısı (yardımcı)."""
+    return max(0, len(birimler) - sigar)
+
+
 def _liste_yerlesimi(ust, alt, adet):
     """Liste kartları için (satır yüksekliği, sığan satır sayısı).
 
@@ -512,9 +517,13 @@ def servisler(ck, x, y, w, h, v, g):
         ck.yazi(x + w - 12, cy, ayrinti, 10.5, arenk, durum == "failed", "e")
         TIKLANABILIR.append((("log", s.get("ad")), (x + 2, sy, w - 4, satir_h)))
 
+    # Kartta yer yetmeyen servisler için: alt satıra dokunmak **tam listeyi** açar
     if len(birimler) > sigar and y + h - 12 >= ust + sigar * satir_h + 10:
-        ck.yazi(x + 34, y + h - 12, f"+{len(birimler) - sigar} servis daha", 10,
-                ck.renk["cok_soluk"])
+        sy = y + h - 20
+        ck.yazi(x + 34, y + h - 12,
+                _kirp(ck, f"⋯ {len(birimler) - sigar} servis daha — tümünü gör",
+                      10, w - 46), 10, ck.renk["mavi"])
+        TIKLANABILIR.append((("servis_listesi", None), (x + 2, sy, w - 4, 20)))
 
 
 # ─── günlükler (geliştirici log dosyaları) ───────────────────────────────────

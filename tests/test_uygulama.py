@@ -599,6 +599,39 @@ def test_servis_dugmeleri_eyleme_gider():
         p.kapat()
 
 
+def test_servis_listesi_gorunumu():
+    """'+N servis daha' → tüm servisler kaydırmalı listede; satır dokunuşu günlüğü açar."""
+    p = _pano_olustur(kartlar=["cpu", "servisler"], guncelleme_denetimi=False)
+    if p is None:
+        return
+    try:
+        assert _veri_bekle(p), "toplayıcı veri üretmedi"
+        p._servis_liste = [
+            {"ad": "apache2.service", "etiket": "Apache", "durum": "active",
+             "baslama": time.time() - 3600, "bellek": 12_000_000},
+            {"ad": "nginx.service", "etiket": "nginx", "durum": "failed"},
+            {"ad": "redis.service", "etiket": "Redis", "durum": "inactive"},
+        ]
+        p.gorunum_degistir("servisliste")
+        _bekle(p, 0.4)
+        p.ciz()
+        p.kok.update()
+        assert p.gorunum == "servisliste"
+        eylemler = [e[0] for e in kartlar_modul.TIKLANABILIR]
+        assert ("log", "apache2.service") in eylemler, eylemler
+        metinler = _metinler(p, "SERVİSLER")
+        assert any("SERVİSLER (3)" in m for m in metinler), metinler
+        assert any("BOZUK" in m for m in metinler), metinler
+        # satıra dokunmak günlüğü açar (log_ac çağrısı)
+        p.log_ac("apache2.service")
+        assert p.gorunum == "log" and p.log_tip == "birim"
+        p.gorunum_degistir("servisliste")
+        assert p._max_kaydir >= 0.0
+        p.gorunum_degistir("pano")
+    finally:
+        p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback

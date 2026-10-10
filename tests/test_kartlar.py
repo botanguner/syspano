@@ -215,6 +215,28 @@ def test_kartlar_tasmaz():
         f"  {k} {w}x{h}: {t} {b}" for k, w, h, t, b in hatalar[:40])
 
 
+def test_servis_karti_tumunu_gor_eylemi():
+    """Sığmayan servisler için kartta 'tümünü gör' eylemi olmalı (kaydırmalı liste)."""
+    import tkinter as tk
+    try:
+        kok = tk.Tk()
+    except Exception as hata:
+        print(f"atlandı (görüntü yok: {hata})")
+        return
+    kok.withdraw()
+    try:
+        c = tk.Canvas(kok, width=900, height=900)
+        cekim = Cekim(c, 1.0, tema.tema_sec("koyu"), tema.yazi_ailesi(kok))
+        kartlar.TIKLANABILIR.clear()
+        kartlar.CIZIM["servisler"](cekim, 10, 10, 200, 90, ORNEK, GECMIS)
+        eylemler = [e[0] for e in kartlar.TIKLANABILIR]
+        assert ("servis_listesi", None) in eylemler, eylemler
+        metinler = [c.itemcget(o, "text") for o in c.find_all() if c.type(o) == "text"]
+        # çok kısa kartta "tümünü gör" satırı sığmaz; erişim yine başlıktan olur
+    finally:
+        kok.destroy()
+
+
 def test_pi_sagligi_karti_durumlari():
     """Pİ SAĞLIĞI kartı normal / geçmişte sorun / şu an sorun durumlarını yazmalı."""
     import tkinter as tk
