@@ -104,11 +104,16 @@ def test_durum_metni_asamalari():
         denetim={}, simdi=simdi, baslangic=0,
         surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "basladi": simdi - 42})
     assert "sürüyor" in metin and "42 sn" in metin and renk == "mavi"
-    # 3) güncelleme başarıyla bitti → yeniden başlat çağrısı
-    metin, renk = guncelleme.durum_metni(
-        denetim={}, simdi=simdi, baslangic=0,
-        surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "bitti": simdi,
-               "sonuc": 0, "surum": "9.9.9"})
+    # 3) güncelleme başarıyla bitti → yeniden başlat çağrısı (bekliyorsa)
+    gercek_gerekli = guncelleme.yeniden_baslat_gerekli
+    guncelleme.yeniden_baslat_gerekli = lambda baslangic=None: True
+    try:
+        metin, renk = guncelleme.durum_metni(
+            denetim={}, simdi=simdi, baslangic=0,
+            surec={"asama": guncelleme.GUNCELLEME_ASAMASI, "bitti": simdi,
+                   "sonuc": 0, "surum": "9.9.9"})
+    finally:
+        guncelleme.yeniden_baslat_gerekli = gercek_gerekli
     assert "tamam" in metin and "9.9.9" in metin and "yeniden başlat" in metin.lower()
     assert renk == "sari"
     # 4) güncelleme başarısız
@@ -162,7 +167,12 @@ def test_surec_durumu_gidis_donus():
             surec = guncelleme.surec_oku()
             assert surec["sonuc"] == 0 and surec["surum"] == "9.9.9"
             assert surec["bitti"] >= surec["basladi"]
-            metin, _ = guncelleme.durum_metni(baslangic=0)
+            gercek_gerekli = guncelleme.yeniden_baslat_gerekli
+            guncelleme.yeniden_baslat_gerekli = lambda baslangic=None: True
+            try:
+                metin, _ = guncelleme.durum_metni(baslangic=0)
+            finally:
+                guncelleme.yeniden_baslat_gerekli = gercek_gerekli
             assert "tamam" in metin and "9.9.9" in metin
             # başarısız güncelleme
             guncelleme.surec_yaz(guncelleme.GUNCELLEME_ASAMASI, sonuc=1, mesaj="disk dolu")
@@ -170,6 +180,47 @@ def test_surec_durumu_gidis_donus():
             assert "başarısız" in metin and "disk dolu" in metin and renk == "kirmizi"
         finally:
             del os.environ["XDG_STATE_HOME"]
+
+
+def test_surec_bitti_uyarisi_kalicilik_yapmaz():
+    """Biten güncelleme kaydı kalıcıdır; yeniden başlatma gerekmiyorsa uyarı bitmeli.
+
+    Kullanıcı bildirdi: pano yeniden başlatılsa da "Güncelleme tamam — Panoyu
+    yeniden başlatın" yazısı kalıyordu (kayıt koşulsuz gösteriliyordu).
+    """
+    import time
+    simdi = 1_800_000_000.0
+    kayit = {"asama": guncelleme.GUNCELLEME_ASAMASI, "bitti": simdi - 60,
+             "sonuc": 0, "surum": "9.9.9"}
+    # yeniden başlatma GERÇEKTEN bekliyorsa (kurulu paket sonradan değişti) uyarı var
+    gercek = guncelleme.yeniden_baslat_gerekli
+    guncelleme.yeniden_baslat_gerekli = lambda baslangic=None: True
+    try:
+        metin, renk = guncelleme.durum_metni(surec=kayit, denetim={}, simdi=simdi,
+                                             baslangic=1.0)
+    finally:
+        guncelleme.yeniden_baslat_gerekli = gercek
+    assert "tamam" in metin and renk == "sari", (metin, renk)
+
+    # pano yeniden başlatıldıysa (gerek yok) uyarı kaybolmalı → "Güncel" durumuna düşer
+    guncelleme.yeniden_baslat_gerekli = lambda baslangic=None: False
+    try:
+        metin, renk = guncelleme.durum_metni(
+            surec=kayit, denetim={"zaman": simdi - 30, "yeni": False},
+            simdi=simdi, baslangic=1.0)
+    finally:
+        guncelleme.yeniden_baslat_gerekli = gercek
+    assert "Güncel" in metin and renk == "yesil", (metin, renk)
+
+    # başarısız güncelleme bir süre görünür kalır, sonra normal duruma döner
+    hatali = dict(kayit, sonuc=1, mesaj="pip hatası")
+    metin, renk = guncelleme.durum_metni(surec=hatali, denetim={}, simdi=simdi,
+                                         baslangic=1.0)
+    assert "başarısız" in metin and renk == "kirmizi", (metin, renk)
+    metin, renk = guncelleme.durum_metni(
+        surec=hatali, denetim={"zaman": simdi - 30, "yeni": False}, simdi=simdi + 7200,
+        baslangic=None)
+    assert "Güncel" in metin, metin
 
 
 def test_yeniden_baslat_gerekli_dosya_zamani():

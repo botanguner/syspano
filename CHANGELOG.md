@@ -3,7 +3,23 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.13.0] — 2026-10-10
+## [1.13.1] — 2026-10-10
+
+### Düzeltildi
+- **"Güncelleme tamam — Panoyu yeniden başlatın" uyarısı kalıcı oluyordu.**
+  `guncelleme-durum.json` kalıcı bir kayıt; 1.4.1'den beri "süreç bitti" satırı
+  **koşulsuz** gösteriliyordu, bu yüzden pano yeniden başlatılsa da uyarı
+  kaybolmuyordu (kullanıcı bildirdi). Artık uyarı yalnızca **gerçekten
+  yeniden başlatma bekliyorsa** gösterilir: kurulu paketin dosya zamanı, panonun
+  açılış anından yeni mi? Pano yeniden başlatılınca kod güncellenir ve uyarı
+  kendiliğinden "✓ Güncel" durumuna döner.
+- Başarısız güncelleme mesajı bir saat görünür kalır, sonra normal duruma döner
+  (eskiden kalıcıydı).
+- 1 yeni test (toplam **21 dosyada 197 test**): biten güncelleme kaydının
+  yeniden başlatma beklemediğinde uyarı üretmemesi, beklerken üretmesi ve
+  başarısızlığın bir saat sonra silinmesi.
+
+## [1.13.0] — 2026-10-10 — 2026-10-10
 
 ### Değişti
 - **Dosya günlüklerinde de zaman penceresi.** Journald kaynaklarında 1.6.0'dan
