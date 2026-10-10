@@ -16,15 +16,22 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
   **"⏳ Yedek sürüyor… · 20 dk · 169 dosya"**.
 - Yedek sürerken **Şimdi yedekle** düğmesi çizilmez (ikinci çalıştırma
   başlatılamasın).
+- **Yarıda kalmış yedek kaydı artık bayat sayılır.** Tarama başlarken durum
+  dosyasına `"durum": "calisiyor"` yazılır; makine tam o sırada kapanırsa kayıt
+  öyle kalır ve bölüm sonsuza kadar "⏳ Yedek sürüyor…" gösterip **Şimdi
+  yedekle** düğmesini gizlerdi. Birim gerçekten çalışmıyorsa ve kayıt 3 saatten
+  eskiyse "⚠ Yedek yarıda kalmış olabilir" yazılır; düğme geri gelir.
 - **Yedek kurulu değilken ayar ekranında boş bir YEDEKLEME bölümü duruyordu**
   (Pi'de başlık + "kurulu değil" + beklenen dosya yolu). YEDEK kartı zaten
   gizlendiği için bölüm de çizilmez; durum dosyası oluşur oluşmaz görünür.
+- `ortak.boyut_metni()` sayısal olmayan değerde panoyu çökertiyordu
+  (`"toplam_bayt": "yok"`); artık `—` döner.
 
 ### Belgeler
 - **CHANGELOG 1.14.1'de kalmıştı**: 1.15.1, 1.16.0 ve 1.17.0 kayıtları geri
   eklendi. "En üstteki kayıt koddaki sürümle aynı mı" testi eklendi, böylece
   sürüm yükseltilip kayıt unutulursa CI yakalar.
-- 7 yeni test → 23 dosyada 216 test.
+- 9 yeni test → 23 dosyada 218 test.
 
 ## [1.17.0] — 2026-10-10
 
@@ -203,7 +210,7 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
   tutucuyu dolduran komut ve `./kur-pi.sh` işaret ediliyor.
 
 ### Test
-- 7 yeni test (`tests/test_install.py`): yardım metni, oturum girdisinin
+- 9 yeni test (`tests/test_install.py`): yardım metni, oturum girdisinin
   `Exec` yolunu **doldurduğu** (`@KOMUT@` kalmıyor), manuel seçeneğin hiçbir şey
   yazmadığı, servis biriminin yazıldığı (`systemctl` yokken çökmemesi), eski
   bayrakların uyumu, `--sor` ile boru girdisinden seçim (2 → servis, 3 → manuel)
@@ -278,7 +285,7 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
     içine tek satır yeterlidir: `syspano --bekci &`.
     (Bu iş, kullanıcının "ekran dondu, fişi çekmek zorunda kaldım" bildirimi
     üzerine eklendi: artık donan pano kendini toparlar.)
-- 7 yeni test (toplam **18 dosyada 165 test**): karar mantığı (başlat/öldür/bekle),
+- 9 yeni test (toplam **18 dosyada 165 test**): karar mantığı (başlat/öldür/bekle),
   kalp yaşı ve eşik davranışı, süreç tanıma (bekçi ve tepsi pano sayılmaz),
   günlük yazımı, kuru çalıştırma, zararsız bir süreci sonlandırma, tanı metni.
 

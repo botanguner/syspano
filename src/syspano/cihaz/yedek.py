@@ -20,6 +20,10 @@ SORGU_ARALIK = 5.0        # saniye; systemctl sorguları bu aralıkta önbelleğ
 # `is-active` bir oneshot çalışırken "activating" döner; "active" beklemek
 # süren bir yedeği "bitmiş" sanmaya yol açardı (canlıda görüldü).
 ETKIN_DURUMLAR = ("active", "activating", "reloading")
+# Durum dosyası tarama başlarken "calisiyor" yazar; makine yedek sürerken
+# kapanırsa bu kayıt öyle kalır. Bundan uzun süredir "calisiyor" görünen kayıt
+# bayat sayılır (ölçülen süre ~20 dk, Pi'de daha uzun olabilir).
+BAYAT_ESIK_SN = 3 * 3600
 _onbellek = {"zaman": 0.0, "sonuc": {}}
 
 
@@ -94,27 +98,35 @@ def durum_metni(ayar=None):
         return satirlar, ["yedek_simdi"]
 
     durum = _sorgu(zamanlayici)
+    bas = ortak.sayi(veri.get("baslangic")) or 0
+    gecen = (time.time() - bas) if bas else 0.0
+    dosyada_calisiyor = veri.get("durum") == "calisiyor"
     # Dosya da bilir: tarama başlarken "calisiyor" yazar. systemd birim durumu
     # gecikirse bile süren yedek "başarılı" görünmesin.
-    calisiyor = bool(durum.get("calisiyor")) or veri.get("durum") == "calisiyor"
+    calisiyor = bool(durum.get("calisiyor")) or (
+        dosyada_calisiyor and gecen < BAYAT_ESIK_SN)
+    # Yedek sürerken makine kapanmışsa dosya "calisiyor" kalır: ne bitmiş
+    # saymalı ne de sonsuza kadar "sürüyor" göstermeli.
+    bayat = dosyada_calisiyor and not durum.get("calisiyor") and not calisiyor
 
     if calisiyor:
         parcalar = []
-        bas = ortak.sayi(veri.get("baslangic")) or 0
         if bas:
-            parcalar.append(_sure_metni(time.time() - bas))
+            parcalar.append(_sure_metni(gecen))
         yuklenen = ortak.sayi(veri.get("yuklenen")) or 0
         if yuklenen:
             parcalar.append(f"{int(yuklenen)} dosya")
         satirlar.append(("⏳ Yedek sürüyor…" + (" · " + " · ".join(parcalar) if parcalar else ""),
                          "mavi"))
+    elif bayat:
+        satirlar.append((f"⚠ Yedek yarıda kalmış olabilir — kayıt "
+                         f"{ortak.sure_metni(gecen)} başlamış", "sari"))
     elif veri.get("sonuc"):
         hata = (veri.get("hata") or "").strip()
         satirlar.append((f"⚠ Son yedek başarısız — {hata[:60] or 'ayrıntı yok'}",
                          "kirmizi"))
     else:
-        bas = ortak.sayi(veri.get("baslangic")) or 0
-        yas = ortak.sure_metni(time.time() - bas) if bas else "?"
+        yas = ortak.sure_metni(gecen) if bas else "?"
         parcalar = [f"Son yedek: {yas}", "başarılı"]
         yuklenen = ortak.sayi(veri.get("yuklenen")) or 0
         if yuklenen:
