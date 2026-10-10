@@ -38,6 +38,21 @@ VARSAYILAN_ESIK = 90.0
 KALP_ARALIK = 3.0          # pano bu aralıkta yazar (bkz. pano._durum_yaz)
 BASLANGIC_TOLERANS = 15.0  # yeni başlayan panoya tanınan süre (ilk kalp atışı için)
 
+# ── panel bağlantısı (DSI + dokunmatik) kopması ──────────────────────────────
+# Raspberry Pi'nin resmî 7" panelinde ekran/dokunmatik bağlantısı kopabiliyor:
+#     vc4-drm gpu: [drm] *ERROR* DSI1: LP0 contention error
+#     edt_ft5x06 10-0038: Unable to fetch data, error: -5
+# Ekran ölür ama **sistem çalışmaya devam eder**; kullanıcı bu durumda fişi
+# çekiyor (SD kart için tehlikeli). Bekçi bu imzaları görürse panoyu kontrollü
+# olarak yeniden başlatır: kabloyu/bağlantıyı yeniden kurar ve fiş çekmekten
+# daha güvenlidir.
+EKRAN_IMZALARI = ("LP0 contention", "edt_ft5x06", "Unable to fetch data")
+EKRAN_PENCERE = 300.0      # saniye; kernel günlüğünde bakılan pencere
+EKRAN_ESIK = 3             # bu kadar imza görülürse bağlantı kopmuş sayılır
+EKRAN_BEKLEME = 600.0      # aynı hataya en fazla bu sıklıkta müdahale (saniye)
+EKRAN_ACILIS_TOLERANS = 300.0   # açılıştan sonraki ilk 5 dakika müdahale etme
+GUNLUK_AZAMI = 512 * 1024  # pano.log bu boyutu aşarsa kırpılır (SD kart dostu)
+
 
 def kalp_yolu():
     return os.path.join(ortam.durum_dizini(), "durum.json")
@@ -155,6 +170,16 @@ def _log(satir, yol=None):
     yol = yol or gunluk_yolu()
     try:
         os.makedirs(os.path.dirname(yol), exist_ok=True)
+        # SD kartı dostu: dosya büyürse son satırları tutup kırpıyoruz
+        try:
+            if os.path.getsize(yol) > GUNLUK_AZAMI:
+                with open(yol, "rb") as f:
+                    f.seek(-GUNLUK_AZAMI // 4, os.SEEK_END)
+                    kuyruk = f.read().decode("utf-8", "replace").splitlines()[-500:]
+                with open(yol, "w") as f:
+                    f.write("\n".join(kuyruk) + "\n")
+        except OSError:
+            pass
         with open(yol, "a") as f:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} bekçi: {satir}\n")
     except Exception:
@@ -223,7 +248,94 @@ def oldur(pid, zaman_asimi=8.0):
         return False
 
 
-def dongu(aralik=None, esik=None, kuru=False, tur_sayisi=None):
+def ekran_hatalari(dakika=None):
+    """Kernel günlüğünde son `dakika` dakikadaki panel bağlantı hatası sayısı.
+
+    `journalctl -k` okunur (kullanıcı systemd-journal grubundaysa yetki gerekmez).
+    Okunamazsa 0 döner — bekçi bu yüzden panoyu boşuna yeniden başlatmaz.
+    """
+    dakika = int(EKRAN_PENCERE / 60) if dakika is None else int(dakika)
+    try:
+        c = subprocess.run(["journalctl", "-k", "--since", f"-{max(1, dakika)}min",
+                            "--no-pager", "-o", "cat"],
+                           capture_output=True, text=True, timeout=15)
+        return say_imzalari(c.stdout or "")
+    except Exception:
+        return 0
+
+
+def say_imzalari(metin):
+    """Metinde panel bağlantı hatası imzalarını sayar (saf fonksiyon)."""
+    return sum(1 for satir in (metin or "").splitlines()
+               if any(imza in satir for imza in EKRAN_IMZALARI))
+
+
+def ekran_karari(hata_sayisi, sistem_yasi, son_mudahale, simdi,
+                 esik=None, acilis_tolerans=None, bekleme=None):
+    """Panel bağlantısı için karar: `"yok"` | `"yeniden_baslat"` (saf fonksiyon)."""
+    esik = EKRAN_ESIK if esik is None else int(esik)
+    acilis_tolerans = (EKRAN_ACILIS_TOLERANS if acilis_tolerans is None
+                       else float(acilis_tolerans))
+    bekleme = EKRAN_BEKLEME if bekleme is None else float(bekleme)
+    if hata_sayisi < esik:
+        return "yok"
+    if sistem_yasi is not None and float(sistem_yasi) < acilis_tolerans:
+        return "yok"                       # yeni açıldı: panel henüz kuruluyor olabilir
+    if son_mudahale and (simdi - float(son_mudahale)) < bekleme:
+        return "yok"                       # az önce müdahale ettik
+    return "yeniden_baslat"
+
+
+def yeniden_baslat(kuru=False, sinyal=None):
+    """Panel bağlantısını yeniden kurmak için sistem yeniden başlatılır.
+
+    `sudo -n` gerekir (parolasız). Yoksa yalnızca uyarı yazılır; kullanıcıya
+    ne yapacağı söylenir — bekçi asla parola sormaz.
+    """
+    import signal as _signal
+    if kuru:
+        return (True, "kuru çalıştırma: yeniden başlatılmadı")
+    try:
+        c = subprocess.run(["sudo", "-n", "/sbin/reboot"],
+                           capture_output=True, text=True, timeout=20)
+        if c.returncode == 0:
+            return (True, "yeniden başlatma istendi")
+        return (False, "sudo -n çalışmadı: " + (c.stderr or "").strip()[:80])
+    except Exception as hata:
+        return (False, f"yeniden başlatılamadı: {hata}")
+
+
+def _sistem_yasi():
+    try:
+        with open("/proc/uptime") as f:
+            return float(f.read().split()[0])
+    except Exception:
+        return None
+
+
+def _mudahale_yolu():
+    return os.path.join(ortam.kalici_durum_dizini(), "son-ekran-mudahalesi.txt")
+
+
+def son_mudahale_oku():
+    """Son ekran müdahalesinin zamanı (yoksa None) — bekçi yeniden başlasa da."""
+    try:
+        with open(_mudahale_yolu()) as f:
+            return float(f.read().strip())
+    except Exception:
+        return None
+
+
+def son_mudahale_yaz(zaman=None):
+    try:
+        os.makedirs(os.path.dirname(_mudahale_yolu()), exist_ok=True)
+        with open(_mudahale_yolu(), "w") as f:
+            f.write(f"{time.time() if zaman is None else float(zaman):.0f}")
+    except Exception:
+        pass
+
+
+def dongu(aralik=None, esik=None, kuru=False, tur_sayisi=None, ekran_koruma=True):
     """Bekçi döngüsü. `tur_sayisi` verilirse o kadar tur döner (test için)."""
     aralik = VARSAYILAN_ARALIK if aralik is None else float(aralik)
     esik = VARSAYILAN_ESIK if esik is None else float(esik)
@@ -250,7 +362,35 @@ def dongu(aralik=None, esik=None, kuru=False, tur_sayisi=None):
                 _log(f"pano donmuş (kuru çalıştırma: öldürülmedi) · {tani(pid)}")
             else:
                 oldur(pid)
+
+        # ── panel bağlantısı (DSI + dokunmatik) koruması ──
+        if ekran_koruma:
+            hata = ekran_hatalari()
+            if hata:
+                ekran_karari_sonuc = ekran_karari(hata, _sistem_yasi(),
+                                                  son_mudahale_oku(), time.time())
+                if ekran_karari_sonuc == "yeniden_baslat":
+                    pencere = int(EKRAN_PENCERE / 60)
+                    _log(f"panel bağlantısı koptu ({hata} hata / {pencere} dk: "
+                         "DSI + dokunmatik) → kontrollü yeniden başlatma "
+                         "(fiş çekmekten güvenli)")
+                    basarili, mesaj = yeniden_baslat(kuru=kuru)
+                    _log("yeniden başlatma: " + mesaj)
+                    if basarili:
+                        son_mudahale_yaz()
+                        son_karar = "yeniden_baslat"
+                        if not kuru:
+                            return son_karar      # sistem kapanıyor
+                    else:
+                        _log("uyarı: otomatik yeniden başlatma yapılamadı; "
+                             "'sudo' parolasız olmalı ya da ekranı elle kapatıp açın")
         if tur_sayisi is not None:
+            if kuru:
+                _log(f"kuru çalıştırma: karar={son_karar}"
+                     + (f" · pano pid {pid}" if pid else " · pano yok"))
             break
+        if kuru:
+            _log(f"kuru çalıştırma: karar={son_karar}"
+                 + (f" · pano pid {pid}" if pid else " · pano yok"))
         time.sleep(aralik)
     return son_karar

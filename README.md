@@ -165,6 +165,7 @@ syspano --yapilandir             # varsayılan yapılandırma dosyasını oluşt
 | `--bekci` | **Pano bekçisi**: panoyu yoksa başlatır, kalp atışı bayatlarsa (donma) yeniden başlatır |
 | `--bekci-aralik SN` / `--bekci-esik SN` | Bekçinin kontrol aralığı (20 sn) / donma eşiği (90 sn) |
 | `--bekci-kuru` | Bekçi kararını yalnızca yazsın; hiçbir şeyi başlatıp öldürmesin |
+| `--ekran-koruma-yok` | Panel bağlantısı (DSI/dokunmatik) koparsa otomatik yeniden başlatma yapma |
 | `--ayarlar` | Pano yerine doğrudan ayar ekranıyla başla |
 | `--demo` | Uydurma verilerle çalıştır — ekran görüntüsü almak, arayüzü göstermek veya donanımı olmadan denemek için. Hiçbir sistem dosyası okunmaz, kişisel bilgi görünmez |
 | `--guncelle` | Depoyu güncelle (git pull) ve paketi yeniden kur |
@@ -533,7 +534,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **20 dosyada 179 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **20 dosyada 184 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -669,6 +670,20 @@ syspano --bekci-kuru               # yalnız kararını yazsın (deneme)
 3. **Öldürmeden önce tanı kaydı yazar** — süreç durumu (`State:`), beklediği
    çekirdek fonksiyonu (`wchan`) ve kalp yaşı — böylece donma sonradan
    incelenebilir. Günlük: `~/.local/state/syspano/pano.log`.
+4. **Panel bağlantısı koparsa kontrollü yeniden başlatır.** Raspberry Pi'nin
+   resmî 7" panelinde DSI bağlantısı ve dokunmatik kopabiliyor:
+
+   ```
+   vc4-drm gpu: [drm] *ERROR* DSI1: LP0 contention error
+   edt_ft5x06 10-0038: Unable to fetch data, error: -5
+   ```
+
+   Bu durumda **ekran ölür ama sistem çalışmaya devam eder**; kullanıcı fişi
+   çeker (SD kart için tehlikelidir — kirli kapanma). Bekçi çekirdek günlüğünde
+   bu imzaları görürse (son 5 dakikada ≥ 3 imza) **kontrollü yeniden başlatma**
+   yapar: kabloyu/bağlantıyı yeniden kurar ve fiş çekmekten güvenlidir.
+   Koruma: açılıştan sonraki ilk 5 dakika ve iki müdahale arasında en az 10
+   dakika bekler (döngüye girmesin); `--ekran-koruma-yok` ile kapatılır.
 
 Raspberry Pi'de oturum açılışına eklemek için `~/.config/labwc/autostart`:
 
@@ -806,7 +821,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 179 test / 20 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 184 test / 20 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

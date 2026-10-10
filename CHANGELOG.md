@@ -3,7 +3,27 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.10.0] — 2026-10-09
+## [1.11.0] — 2026-10-10
+
+### Eklendi
+- **Panel bağlantısı koruması (bekçi).** Pi'nin resmî 7" panelinde DSI
+  bağlantısı + dokunmatik kopabiliyor; **ekran ölürken sistem çalışmaya devam
+  ediyor** ve kullanıcı fişi çekiyor (kirli kapanma → ext4 orphan cleanup, SD
+  kart riski). Bekçi artık çekirdek günlüğünde şu imzaları izliyor:
+  `DSI1: LP0 contention error`, `edt_ft5x06 … Unable to fetch data`.
+  Son 5 dakikada ≥ 3 imza görülürse **kontrollü yeniden başlatma** yapar
+  (`sudo -n /sbin/reboot`) ve günlüğe nedenini yazar. Döngüye girmemek için
+  açılıştan sonraki ilk 5 dakika ve iki müdahale arasında en az 10 dakika
+  bekler; müdahale zamanı dosyaya yazılır (bekçi yeniden başlasa da korunur).
+  `--ekran-koruma-yok` ile kapatılır.
+- **Günlük kırpma:** `pano.log` 512 KB'ı aşarsa son 500 satır tutulur (SD kart
+  dostu, ayrıca dosyaya karışan ikili baytlar temizlenir).
+- Kuru çalıştırma artık her turda kararını yazar (`kuru çalıştırma: karar=…`).
+- 5 yeni test (toplam **20 dosyada 184 test**): imza sayımı, karar matrisi
+  (eşik/açılış toleransı/müdahale aralığı), kuru ve başarısız yeniden başlatma,
+  müdahale zamanının kalıcılığı, uçtan uca "ekran koptu → yeniden başlat" kararı.
+
+## [1.10.0] — 2026-10-09 — 2026-10-09
 
 ### Eklendi
 - **Kurulum artık "panoyu nasıl başlatmak istersiniz?" diye soruyor.**
