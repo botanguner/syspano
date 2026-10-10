@@ -403,11 +403,18 @@ def durum_metni(denetim=None, surec=None, simdi=None, denetim_suruyor=False,
         gecen = int(max(0.0, simdi - float(surec.get("basladi") or simdi)))
         return (f"⏳ Güncelleme sürüyor… ({gecen} sn)", "mavi")
     if surec.get("bitti"):
+        yas = simdi - float(surec.get("bitti") or 0)
         if surec.get("sonuc"):
-            ayrinti = surec.get("mesaj") or "ayrıntı: güncelleme.log"
-            return (f"⚠ Güncelleme başarısız — {ayrinti}", "kirmizi")
-        surum = surec.get("surum") or kurulu_surum()
-        return (f"✓ Güncelleme tamam ({surum}) — Panoyu yeniden başlatın", "sari")
+            # başarısızlık bir süre görünür kalsın (kullanıcı görsün), sonra normal duruma dön
+            if yas < 3600:
+                ayrinti = surec.get("mesaj") or "ayrıntı: güncelleme.log"
+                return (f"⚠ Güncelleme başarısız — {ayrinti}", "kirmizi")
+        elif yeniden_baslat_gerekli(baslangic):
+            # Yalnızca gerçekten yeniden başlatma bekliyorsa hatırlat. Kayıt
+            # kalıcı olduğu için koşulsuz gösterildiğinde, pano yeniden
+            # başlatılsa da uyarı sonsuza dek kalıyordu (kullanıcı bildirdi).
+            surum = surec.get("surum") or kurulu_surum()
+            return (f"✓ Güncelleme tamam ({surum}) — Panoyu yeniden başlatın", "sari")
     if zaman_asimi:
         return ("⚠ Denetim zaman aşımına uğradı (ağ yok?) — yeniden deneyin", "kirmizi")
     if yeniden_baslat_gerekli(baslangic):
