@@ -9,6 +9,7 @@ yakalar:
 * Koda kart eklenirse README onu anmalı.
 * Komut satırına seçenek eklenirse README onu anmalı.
 * `cihaz/yedek.py` içindeki varsayılanlar ayarlarla aynı olmalı.
+* CHANGELOG'un en üst kaydı koddaki sürümle aynı olmalı.
 
 İsteğe bağlı: `SYSPANO_WIKI` değişkeni bir wiki kopyasını gösteriyorsa test
 sayısı orada da denetlenir (ör. `SYSPANO_WIKI=/tmp/wiki-clone ./tests/run.sh belgeler`).
@@ -123,6 +124,19 @@ def test_yedek_varsayilanlari_ayarla_ayni():
     """`cihaz/yedek.py` sabitleri ayar varsayılanlarıyla aynı kalmalı."""
     assert yedek.VARSAYILAN_YOL == ayar.VARSAYILAN["yedek_durum_yolu"]
     assert yedek.VARSAYILAN_ZAMANLAYICI == ayar.VARSAYILAN["yedek_zamanlayici"]
+
+
+def test_changelog_en_ust_surum_kodla_ayni():
+    """Sürüm yükseltilip CHANGELOG kaydı unutulmasın.
+
+    CHANGELOG 1.14.1'de kalıp 1.15.1–1.17.0 kayıtları atlanmıştı; bu test
+    aynı kaymanın tekrarını yakalar.
+    """
+    changelog = (KOK / "CHANGELOG.md").read_text(encoding="utf-8")
+    basliklar = re.findall(r"^## \[([^\]]+)\]", changelog, re.M)
+    assert basliklar, "CHANGELOG'da sürüm başlığı yok"
+    assert basliklar[0] == __version__, (
+        f"CHANGELOG'un en üst kaydı {basliklar[0]}, kodda sürüm {__version__}")
 
 
 if __name__ == "__main__":

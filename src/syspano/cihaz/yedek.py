@@ -17,6 +17,9 @@ from . import ortak
 VARSAYILAN_YOL = "~/.local/state/gdrive-yedek/durum.json"
 VARSAYILAN_ZAMANLAYICI = "yedek.timer"
 SORGU_ARALIK = 5.0        # saniye; systemctl sorguları bu aralıkta önbelleğe alınır
+# `is-active` bir oneshot çalışırken "activating" döner; "active" beklemek
+# süren bir yedeği "bitmiş" sanmaya yol açardı (canlıda görüldü).
+ETKIN_DURUMLAR = ("active", "activating", "reloading")
 _onbellek = {"zaman": 0.0, "sonuc": {}}
 
 
@@ -54,9 +57,18 @@ def _sorgu(zamanlayici, taze=False):
     _, timer = _calistir(["systemctl", "--user", "is-active", zamanlayici])
     _, servis = _calistir(["systemctl", "--user", "is-active",
                            zamanlayici.replace(".timer", ".service")])
-    sonuc = {"zamanlayici_etkin": timer == "active", "calisiyor": servis == "active"}
+    sonuc = {"zamanlayici_etkin": timer in ETKIN_DURUMLAR,
+             "calisiyor": servis in ETKIN_DURUMLAR}
     _onbellek.update({"zaman": simdi, "sonuc": sonuc})
     return sonuc
+
+
+def _sure_metni(saniye):
+    """'1250' → '20 dk' (geçersiz/boş değerde '')."""
+    try:
+        return f"{int(max(0.0, float(saniye))) // 60} dk"
+    except (TypeError, ValueError):
+        return ""
 
 
 def durum_metni(ayar=None):
@@ -64,17 +76,15 @@ def durum_metni(ayar=None):
 
     `satirlar`: [(metin, renk anahtarı), ...] — durum + sıradaki çalışma.
     `eylemler`: düğme kimlikleri ("yedek_simdi" · "zamanlayici_ac" · "zamanlayici_kapat").
+    Yedek kurulu değilse **boş** döner: bölüm çizilmez (YEDEK kartı da gizlenir).
     """
     ayar = ayar or {}
     yol = os.path.expanduser(ayar.get("yedek_durum_yolu") or VARSAYILAN_YOL)
     zamanlayici = ayar.get("yedek_zamanlayici", VARSAYILAN_ZAMANLAYICI)
-    durum = _sorgu(zamanlayici)
     satirlar = []
 
     if not os.path.exists(yol):
-        satirlar.append(("Yedek kurulu değil (durum dosyası yok)", "soluk"))
-        satirlar.append((f"Beklenen: {yol}", "cok_soluk"))
-        return satirlar, []
+        return [], []
 
     try:
         with open(yol) as f:
@@ -83,8 +93,21 @@ def durum_metni(ayar=None):
         satirlar.append((f"Durum dosyası okunamadı: {hata}", "kirmizi"))
         return satirlar, ["yedek_simdi"]
 
-    if durum.get("calisiyor"):
-        satirlar.append(("⏳ Yedek sürüyor…", "mavi"))
+    durum = _sorgu(zamanlayici)
+    # Dosya da bilir: tarama başlarken "calisiyor" yazar. systemd birim durumu
+    # gecikirse bile süren yedek "başarılı" görünmesin.
+    calisiyor = bool(durum.get("calisiyor")) or veri.get("durum") == "calisiyor"
+
+    if calisiyor:
+        parcalar = []
+        bas = ortak.sayi(veri.get("baslangic")) or 0
+        if bas:
+            parcalar.append(_sure_metni(time.time() - bas))
+        yuklenen = ortak.sayi(veri.get("yuklenen")) or 0
+        if yuklenen:
+            parcalar.append(f"{int(yuklenen)} dosya")
+        satirlar.append(("⏳ Yedek sürüyor…" + (" · " + " · ".join(parcalar) if parcalar else ""),
+                         "mavi"))
     elif veri.get("sonuc"):
         hata = (veri.get("hata") or "").strip()
         satirlar.append((f"⚠ Son yedek başarısız — {hata[:60] or 'ayrıntı yok'}",
@@ -93,8 +116,9 @@ def durum_metni(ayar=None):
         bas = ortak.sayi(veri.get("baslangic")) or 0
         yas = ortak.sure_metni(time.time() - bas) if bas else "?"
         parcalar = [f"Son yedek: {yas}", "başarılı"]
-        if veri.get("yuklenen"):
-            parcalar.append(f"{int(veri['yuklenen'])} dosya")
+        yuklenen = ortak.sayi(veri.get("yuklenen")) or 0
+        if yuklenen:
+            parcalar.append(f"{int(yuklenen)} dosya")
         if veri.get("toplam_bayt"):
             parcalar.append(ortak.boyut_metni(veri["toplam_bayt"]))
         satirlar.append((" · ".join(parcalar), "yesil"))
@@ -108,7 +132,8 @@ def durum_metni(ayar=None):
         satirlar.append((f"Sıradaki: {time.strftime('%d.%m %H:%M', time.localtime(okunur))}"
                          if okunur else f"Sıradaki: {sonraki[:24]}", "soluk"))
 
-    eylemler = ["yedek_simdi"]
+    # süren yedeğe ikinci bir tarama başlatmayı önermeyiz
+    eylemler = [] if calisiyor else ["yedek_simdi"]
     eylemler.append("zamanlayici_kapat" if durum.get("zamanlayici_etkin")
                     else "zamanlayici_ac")
     return satirlar, eylemler

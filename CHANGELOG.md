@@ -3,6 +3,61 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.17.1] — 2026-10-10
+
+### Düzeltildi
+- **Ayar ekranındaki YEDEKLEME bölümü, süren yedeği "başarılı" gösteriyordu.**
+  `systemctl is-active` bir `oneshot` birim çalışırken `activating` döner;
+  bölüm yalnızca `active` durumunu "sürüyor" saydığı için yedek boyunca ekranda
+  bir önceki çalışmanın "Son yedek: … başarılı" satırı duruyordu (canlıda
+  ölçüldü: 20 dakikalık çalışma boyunca yanlış durum). Artık `activating` ve
+  `reloading` de süren sayılır, `durum.json` içindeki `"durum": "calisiyor"`
+  alanı da dikkate alınır ve satır ilerlemeyi gösterir:
+  **"⏳ Yedek sürüyor… · 20 dk · 169 dosya"**.
+- Yedek sürerken **Şimdi yedekle** düğmesi çizilmez (ikinci çalıştırma
+  başlatılamasın).
+- **Yedek kurulu değilken ayar ekranında boş bir YEDEKLEME bölümü duruyordu**
+  (Pi'de başlık + "kurulu değil" + beklenen dosya yolu). YEDEK kartı zaten
+  gizlendiği için bölüm de çizilmez; durum dosyası oluşur oluşmaz görünür.
+
+### Belgeler
+- **CHANGELOG 1.14.1'de kalmıştı**: 1.15.1, 1.16.0 ve 1.17.0 kayıtları geri
+  eklendi. "En üstteki kayıt koddaki sürümle aynı mı" testi eklendi, böylece
+  sürüm yükseltilip kayıt unutulursa CI yakalar.
+- 7 yeni test → 23 dosyada 216 test.
+
+## [1.17.0] — 2026-10-10
+
+### Eklendi
+- **Ayar ekranına YEDEKLEME bölümü.** Durum satırları (son yedek, dosya sayısı,
+  boyut, sıradaki çalışma) ve düğmeler: **Şimdi yedekle**,
+  **Otomatik yedeği aç/kapat**. Bölüm yalnızca `yedek_durum_yolu` dosyası
+  varsa görünür.
+- `cihaz/yedek.py`: `durum_metni()` ve `eylem()`. **Şimdi yedekle**
+  `systemctl --user start --no-block` kullanır: yedek dakikalarca sürdüğü için
+  (canlıda ~25 dk) beklemeli çağrı panoyu o süre boyunca kilitlerdi.
+- 6 yeni test → 23 dosyada 209 test.
+
+## [1.16.0] — 2026-10-10
+
+### Eklendi
+- **Günlük görüntüleyicide yatay kaydırma.** Uzun satırlarda önemli bilgi
+  satırın sonunda kaldığı için kırpılıyordu. Artık iki eksende kaydırma var:
+  yatay sürükleme ve Shift/tekerlek; sınır en uzun satır − görünen genişlik,
+  başlıkta `↔ %` ipucu.
+- 1 yeni test → 22 dosyada 203 test.
+
+## [1.15.1] — 2026-10-10
+
+### Düzeltildi
+- **Küçük ekranda kartlar gizlenince kaydırma kapanıyordu.** Pi'de 14 karttan
+  12'si gizleniyor, gizleme sığdırdığı için kaydırma kapalı kalıyordu; sonuçta
+  SERVİSLER kartının altı görünmüyor ve kaydırılamıyordu. Artık gizleme en
+  fazla **3 kart**; daha fazlası gerekiyorsa hiç gizleme yapılmaz ve pano
+  kaydırılabilir olur. Gizleme yalnızca kaydırmasız sığdırmayı başarıyorsa
+  uygulanır.
+- 1 yeni test → 22 dosyada 202 test.
+
 ## [1.14.1] — 2026-10-10
 
 ### Düzeltildi

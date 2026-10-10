@@ -73,8 +73,11 @@ def kuyruk(yol, satir=200, azami_bayt=512 * 1024):
 
 
 def boyut_metni(bayt):
-    """Baytı okunur biçime çevirir: '1.33 GiB'."""
-    b = float(bayt or 0)
+    """Baytı okunur biçime çevirir: '1.33 GiB'. Sayı olmayan değerde '—'."""
+    try:
+        b = float(bayt or 0)
+    except (TypeError, ValueError):
+        return "—"
     for birim in ("B", "KiB", "MiB", "GiB", "TiB"):
         if abs(b) < 1024:
             return f"{b:.0f} {birim}" if birim == "B" else f"{b:.2f} {birim}"

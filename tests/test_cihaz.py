@@ -80,6 +80,14 @@ def test_yardimci_bicimler():
     assert "saat" in sure_metni(7200)
 
 
+def test_boyut_metni_sayisal_olmayan_degerde_cokmez():
+    """Dış kaynaktan gelen durum dosyası bozuk olabilir (ör. 'yok')."""
+    from syspano.cihaz.ortak import boyut_metni
+    assert boyut_metni("yok") == "—"
+    assert boyut_metni(None) == "0 B"
+    assert boyut_metni([1]) == "—"
+
+
 # ─── performans davranışları ─────────────────────────────────────────────────
 def test_surecler_her_saniye_taranmaz():
     """`/proc` taraması pahalı; `ARALIK` içinde tekrar taranmamalı."""
