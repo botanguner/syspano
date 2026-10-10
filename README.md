@@ -535,7 +535,7 @@ PYTHONPATH=src python3 tests/test_loglar.py      # günlük keşfi ve kuyruk oku
 | `test_belgeler.py` | **Belge–kod uyumu**: README'deki `config.json` örneği gerçek varsayılanlarla aynı mı, her ayar anahtarı kodda okunuyor mu (ölü anahtar yok), README'deki test sayısı doğru mu, yeni kart/seçenek README'ye yazılmış mı |
 | `test_loglar.py` | Günlük keşfi (glob, `~`, dedupe, izin), **kuyruk okuma** (son N satır, CRLF, `\n`'siz son satır, bayt sınırı), hata/uyarı özeti, süzgeç ve keşif/stat önbelleği |
 
-Toplam **21 dosyada 193 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
+Toplam **21 dosyada 196 test**. Ayrıca kaynak profili için: `python3 arac/olcum.py`.
 
 Ölçek ve yerleşimi denemek için:
 
@@ -798,7 +798,7 @@ syspano --log mariadb --log-pencere 15     # son 15 dakikanın hata/uyarı sayı
 **Sayım ölçütü zaman penceresidir (journald):** "son 200 satır" yanıltıcı
 olabiliyordu — sakin bir günlükte aylar önceki açılış hataları hâlâ o pencerede
 kalıp "8 hata" gösteriyordu (Raspberry Pi'de MariaDB'de görüldü). Bu yüzden
-journald kaynaklarında hata/uyarı sayısı **son 60 dakikaya** göre hesaplanır
+hata/uyarı sayısı **son 60 dakikaya** göre hesaplanır (dosya günlüklerinde satır başındaki zaman damgası okunur: ISO, `2026/10/10 12:48:12` ve Apache `[Thu Oct 08 … 2026]`; damga yoksa son satırlara düşülür)
 (`log_pencere_dk` ya da `--log-pencere`). Dosya kaynaklarında zaman damgası
 garantisi olmadığı için son satırlar kullanılır.
 
@@ -822,7 +822,7 @@ garantisi olmadığı için son satırlar kullanılır.
 | Pencere yönetimi | X11/XWayland, KWin betikleri (qdbus), `overrideredirect` |
 | Opsiyonel | **PySide6** (tepsi simgesi), ImageMagick (ekran görüntülerinin meta verisini sıyırmak için) |
 | Paketleme | `pyproject.toml` (pip/pipx), `install.sh` / `guncelle.sh`, systemd kullanıcı servisi, `.desktop` |
-| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 193 test / 21 dosya |
+| Test | Kendi test koşucusu (`tests/run.sh`), Xvfb (arayüz testleri), 196 test / 21 dosya |
 | CI/CD | **GitHub Actions** (5 Python sürümü + Xvfb arayüz testleri + kabuk denetimi), **CodeQL**, **Dependabot**, dal koruması |
 | Belgeler | Markdown, Mermaid (wiki ve README diyagramları) |
 

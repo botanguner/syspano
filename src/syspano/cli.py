@@ -315,6 +315,7 @@ def _log_kaynaklari_listele(satir=200, pencere=None):
     print(f"{'':<22} {'':<12} {'':>8} {'(son ' + str(pencere) + ' dk)':>5}")
     print("-" * 100)
     simdi = time.time()
+    damgasiz = []
     for k in kaynaklar:
         if k.get("tur") == "journal":
             ozet = L.ozet_journal(k["birim"], pencere)
@@ -324,10 +325,14 @@ def _log_kaynaklari_listele(satir=200, pencere=None):
         if not k["okunabilir"]:
             print(f"{k['etiket']:<22} {'izin yok':<12} {'—':>8} {'—':>5} {'—':>6}  {k['yol']}")
             continue
-        ozet = L.ozet(kuyruk(k["yol"], max(1, satir)))
+        ozet = L.ozet_dosya(k["yol"], pencere, max(1, satir))
+        damgasiz.append(not ozet["pencereli"])
         yas = _yas_metni(simdi - k["son"]) if k["son"] else "—"
         print(f"{k['etiket']:<22} {yas:<12} {_boyut(k['boyut']):>8} "
               f"{ozet['hata']:>5} {ozet['uyari']:>6}  {k['yol']}")
+    if any(damgasiz):
+        print("    (damgasız dosyalarda son satırlar sayılır; pencereli sayım için "
+              "satır başında zaman damgası gerekir)")
     print(f"\n{len(kaynaklar)} günlük · içeriği için: syspano --log-dosya YOL "
           f"(journal kaynakları için: syspano --log BIRIM)")
     return 0

@@ -24,6 +24,8 @@ aittir) kartta **izin yok** olarak işaretlenir; görüntüleyici çözümü sö
 
 import glob
 import os
+import re
+import time
 
 from . import ortak
 
@@ -306,6 +308,75 @@ def ozet(metin):
         elif tur == "uyari":
             uyari += 1
     return {"hata": hata, "uyari": uyari}
+
+
+# ── dosya günlüklerinde zaman penceresi ─────────────────────────────────────
+_ISO = re.compile(r"(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
+_EGIK = re.compile(r"(\d{4})/(\d{2})/(\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
+# Apache: [Thu Oct 08 16:42:53.327959 2026]  (yıl sonda)
+_APACHE = re.compile(r"\[(\w{3}) (\w{3}) +(\d{1,2}) (\d{2}):(\d{2}):(\d{2})[^\]]*?(\d{4})\]")
+_AYLAR = {a: i for i, a in enumerate(
+    ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+     "Nov", "Dec"), start=1)}
+
+
+def satir_zamani(satir):
+    """Satırdaki zaman damgasını epoch'a çevirir (yoksa None) — saf fonksiyon.
+
+    Desteklenen biçimler: ISO (`2026-10-10 12:48:12`, Laravel/journal), eğik
+    çizgili (`2026/10/10 12:48:12`, nginx) ve Apache (`[Thu Oct 08 16:42:53 2026]`).
+    """
+    metin = str(satir or "")
+    m = _ISO.search(metin) or _EGIK.search(metin)
+    if m:
+        try:
+            return time.mktime(time.strptime("-".join(m.groups()[:3]) + " " +
+                                             ":".join(m.groups()[3:]), "%Y-%m-%d %H:%M:%S"))
+        except Exception:
+            return None
+    m = _APACHE.search(metin)
+    if m:
+        ay = _AYLAR.get(m.group(2))
+        if not ay:
+            return None
+        try:
+            return time.mktime((int(m.group(7)), ay, int(m.group(3)), int(m.group(4)),
+                                int(m.group(5)), int(m.group(6)), 0, 0, -1))
+        except Exception:
+            return None
+    return None
+
+
+def ozet_metin(metin, dakika=None, simdi=None):
+    """Metindeki hata/uyarıları **son `dakika` dakikaya** göre sayar (saf).
+
+    Damgalı satırlar yalnızca pencere içindeyse sayılır; damgasız satırlar
+    (ör. devam satırları) her zaman sayılır. Hiç damga bulunamazsa `pencereli`
+    False döner ve çağıran son satırlara (kuyruk) düşebilir.
+    """
+    dakika = int(dakika if dakika is not None else VARSAYILAN_PENCERE_DK)
+    simdi = time.time() if simdi is None else simdi
+    esik = simdi - dakika * 60
+    hata = uyari = damgali = 0
+    for satir in (metin or "").splitlines():
+        t = satir_zamani(satir)
+        if t is not None:
+            damgali += 1
+            if t < esik:
+                continue
+        tur = _satir_turu(satir)
+        if tur == "hata":
+            hata += 1
+        elif tur == "uyari":
+            uyari += 1
+    return {"hata": hata, "uyari": uyari, "damgali": damgali,
+            "pencereli": damgali > 0, "pencere_dk": dakika}
+
+
+def ozet_dosya(yol, dakika=None, satir=400):
+    """Bir günlük dosyasındaki hata/uyarıları zaman penceresine göre sayar."""
+    metin = ortak.kuyruk(os.path.expanduser(str(yol)), satir, AZAMI_BAYT)
+    return ozet_metin(metin, dakika)
 
 
 def ozet_journal(birim, dakika=None, satir=2000):

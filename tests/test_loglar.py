@@ -290,6 +290,52 @@ def test_ozet_journal_hata_durumunda_sifir_doner():
     assert o["hata"] == 0 and o["uyari"] == 0 and o.get("hata_mesaji")
 
 
+# ─── dosya günlüklerinde zaman penceresi ─────────────────────────────────────
+def test_satir_zamani_bicimleri():
+    import time as _t
+    iso = L.satir_zamani("[2026-10-10 12:48:12] production.ERROR: bağlantı yok")
+    assert iso and abs(iso - _t.mktime((2026, 10, 10, 12, 48, 12, 0, 0, -1))) < 1
+    egik = L.satir_zamani("2026/10/10 12:48:12 [error] 1#1: mesaj")
+    assert egik and abs(egik - iso) < 1
+    apache = L.satir_zamani("[Thu Oct 08 16:42:53.327959 2026] [ssl:warn] AH01906: x")
+    assert apache and abs(apache - _t.mktime((2026, 10, 8, 16, 42, 53, 0, 0, -1))) < 1
+    assert L.satir_zamani("damgasız satır") is None
+    assert L.satir_zamani("") is None
+
+
+def test_ozet_metin_penceresi():
+    simdi = 1_800_000_000.0
+    def damga(sn):
+        import time as _t
+        return _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(simdi - sn))
+    metin = "\n".join([
+        f"[{damga(30)}] ERROR: yeni hata",          # pencere içinde
+        f"[{damga(60 * 55)}] ERROR: 55 dk önce",    # pencere içinde
+        f"[{damga(60 * 90)}] ERROR: 90 dk önce",    # dışında → sayılmaz
+        f"[{damga(60 * 90)}] WARNING: eski uyarı",  # dışında
+        "damgasız ERROR satırı",                    # damgasız → sayılır
+    ])
+    o = L.ozet_metin(metin, 60, simdi)
+    assert o["pencereli"] is True and o["damgali"] == 4, o
+    assert (o["hata"], o["uyari"]) == (3, 0), o
+    # hiç damga yoksa pencereli False
+    o2 = L.ozet_metin("ERROR bir\nWARN iki", 60, simdi)
+    assert o2["pencereli"] is False and o2["hata"] == 1 and o2["uyari"] == 1, o2
+
+
+def test_ozet_dosya_pencereyi_uygular():
+    import time as _t
+    with tempfile.TemporaryDirectory() as d:
+        simdi = _t.time()
+        eski = _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(simdi - 7200))
+        yeni = _t.strftime("%Y-%m-%d %H:%M:%S", _t.localtime(simdi - 60))
+        yol = _yaz(d, "error.log", [f"[{eski}] ERROR: eski hata",
+                                    f"[{yeni}] ERROR: yeni hata",
+                                    f"[{yeni}] [ssl:warn] uyarı"])
+        o = L.ozet_dosya(yol, 60)
+        assert o["pencereli"] is True and o["hata"] == 1 and o["uyari"] == 1, o
+
+
 # ─── toplayıcı arayüzü (önbellek) ────────────────────────────────────────────
 def _durum():
     return SimpleNamespace(log_kaynaklar=None, log_kesif=0.0, log_son=0.0, log_sonuc={})
