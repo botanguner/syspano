@@ -372,6 +372,8 @@ class Pano:
         # kaydırma sınırları
         if self.gorunum == "log":
             self._max_kaydir = max(0.0, self._log_icerik_y() * self.S - self.h)
+        elif self.gorunum == "servisliste":
+            self._max_kaydir = max(0.0, self._servis_icerik_y() * self.S - self.h)
         elif self.gorunum == "ayar":
             durum = self._ayar_durumu()
             self._ayar_plan = ayar_ekrani.yerlesim(
@@ -388,7 +390,11 @@ class Pano:
 
         # içerik (kaydırmalı) — hem "kare" hem "icerik" etiketi alır
         kartlar_modul.TIKLANABILIR.clear()
-        if self.gorunum == "log":
+        if self.gorunum == "servisliste":
+            c.etiket((KARE_YENI, ICERIK))
+            c.kaydir_ayarla(self.kaydir)
+            self._servis_listesi_ciz()
+        elif self.gorunum == "log":
             # başlık sabit (üst şerit gibi), satırlar kaydırılır
             c.etiket(KARE_YENI)
             c.kaydir_ayarla(0.0)
@@ -654,6 +660,55 @@ class Pano:
         elif kid in ("servis_kur", "servis_baslat", "servis_durdur", "servis_yeniden"):
             self._servis_isle(kid)
 
+    def servis_listesi_ac(self):
+        """SERVİSLER kartındaki "+N daha" satırı: tam liste görünümü."""
+        self.kaydir = 0.0
+        self._servis_liste = self._servis_birimleri()
+        self.gorunum_degistir("servisliste")
+
+    def _servis_birimleri(self):
+        d = (self.t.al() or {}).get("servisler") or {}
+        return sorted(d.get("birimler") or [],
+                      key=lambda b: ({"failed": 0}.get(b.get("durum"), 1),
+                                     b.get("etiket", "")))
+
+    def _servis_icerik_y(self):
+        return self.LOG_UST + len(getattr(self, "_servis_liste", []) or []) * 34 + 20
+
+    def _servis_listesi_ciz(self):
+        """Tüm servisler: kaydırmalı liste; satıra dokununca günlüğü açılır."""
+        c, R = self.cek, self.R
+        birimler = getattr(self, "_servis_liste", None) or self._servis_birimleri()
+        self._servis_liste = birimler
+        x0 = 14.0
+        c.yazi(x0, 62, f"SERVİSLER ({len(birimler)})", 12, R["mavi"], True)
+        c.yazi(self.tasarim_g - 14, 62, "satıra dokun → günlük · Esc ile dön", 10,
+               R["cok_soluk"], False, "e")
+        simdi = time.time()
+        for i, s in enumerate(birimler):
+            sy = self.LOG_UST - 10 + i * 34
+            cy = sy + 17
+            c.dik(x0 - 8, sy, self.tasarim_g - x0 + 8, sy + 32, R["icerik"], R["kenar"])
+            c.oval(x0, cy - 5, x0 + 10, cy + 5,
+                   kartlar_modul.servis_rengi(c, s.get("durum")))
+            c.yazi(x0 + 20, cy, s.get("etiket", "?"), 11.5, R["yazi"])
+            parcalar = []
+            if s.get("durum") == "active":
+                if s.get("baslama"):
+                    parcalar.append(kartlar_modul.sure_kisa(simdi - s["baslama"]))
+                bellek = kartlar_modul.bellek_kisa(s.get("bellek"))
+                if bellek:
+                    parcalar.append(bellek)
+            elif s.get("durum") == "failed":
+                parcalar.append("BOZUK")
+            else:
+                parcalar.append(s.get("durum") or "kapalı")
+            c.yazi(self.tasarim_g - 22, cy, " · ".join(parcalar), 10.5,
+                   R["kirmizi"] if s.get("durum") == "failed" else R["soluk"],
+                   s.get("durum") == "failed", "e")
+            kartlar_modul.TIKLANABILIR.append((("log", s.get("ad")),
+                                              (0, sy, self.tasarim_g, 32)))
+
     def _servis_isle(self, kid):
         """Başlatma yöntemi düğmeleri: servisi kur / başlat / durdur / yeniden başlat.
 
@@ -895,7 +950,8 @@ class Pano:
         s = v.get("sistem") or {}
         up = int(s.get("uptime_sn", 0))
         baslik = {"pano": "▣  SYSPANO", "terminal": "▶  TERMINAL",
-                  "ayar": "⚙  AYARLAR", "log": "≡  GÜNLÜK"}.get(self.gorunum, "▣  SYSPANO")
+                  "ayar": "⚙  AYARLAR", "log": "≡  GÜNLÜK",
+                  "servisliste": "☰  SERVİSLER"}.get(self.gorunum, "▣  SYSPANO")
         c.yazi(18, 23, baslik, 12, R["mavi"], True)
 
         # orta bilgi: düğmelere çarpmayacak en uzun sürüm seçilir
@@ -1141,6 +1197,8 @@ class Pano:
                         self.log_ac_dosya(eylem[1])
                     elif eylem[0] == "log_journal":
                         self.log_ac_journal(eylem[1])
+                    elif eylem[0] == "servis_listesi":
+                        self.servis_listesi_ac()
                     return
         if self.gorunum == "terminal" and self.terminal and not self.terminal.calisiyor:
             self.terminal_baslat()
@@ -1167,7 +1225,7 @@ class Pano:
             self.ciz()
 
     def _tus(self, olay):
-        if olay.keysym == "Escape" and self.gorunum in ("ayar", "log"):
+        if olay.keysym == "Escape" and self.gorunum in ("ayar", "log", "servisliste"):
             self.gorunum_degistir("pano")
             return "break"
         if olay.state & 0x4:
@@ -1191,7 +1249,7 @@ class Pano:
             self.bildiri = "terminal kapalı (yapılandırma)"
             self.bildiri_zaman = time.monotonic()
             return
-        if yeni not in ("pano", "terminal", "ayar", "log"):
+        if yeni not in ("pano", "terminal", "ayar", "log", "servisliste"):
             return
         self.gorunum = yeni
         if yeni in ("ayar", "log"):
