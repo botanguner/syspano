@@ -88,10 +88,10 @@ def test_dongu_kuru_calistirma_bir_tur():
         os.environ["XDG_RUNTIME_DIR"] = d
         try:
             karar = bekci.dongu(kuru=True, tur_sayisi=1)
-            assert karar in ("baslat", "bekle", "oldur"), karar
+            assert karar in ("baslat", "bekle", "oldur", "yeniden_baslat"), karar
             with open(bekci.gunluk_yolu()) as f:
                 icerik = f.read()
-            assert "bekçi:" in icerik, icerik
+            assert "kuru çalıştırma: karar=" in icerik, icerik
             if karar == "baslat":
                 assert "başlatılmadı" in icerik
         finally:
@@ -136,6 +136,88 @@ def test_bekci_tek_kopya_calisir():
                 bekci.bekci_pid = gercek
         finally:
             del os.environ["XDG_STATE_HOME"]
+
+
+def test_ekran_imzalari_sayilir():
+    """Panel bağlantısı hata imzaları sayılmalı (saf fonksiyon)."""
+    metin = "\n".join([
+        "Oct 10 12:48:12 vtop kernel: vc4-drm gpu: [drm] *ERROR* DSI1: LP0 contention error",
+        "Oct 10 12:48:12 vtop kernel: edt_ft5x06 10-0038: Unable to fetch data, error: -5",
+        "Oct 10 12:48:12 vtop kernel: vc4-drm gpu: [drm] *ERROR* DSI1: LP0 contention error",
+        "Oct 10 12:48:13 vtop kernel: ilgisiz bir satır",
+    ])
+    assert bekci.say_imzalari(metin) == 3
+    assert bekci.say_imzalari("") == 0
+    assert bekci.say_imzalari("her şey yolunda") == 0
+
+
+def test_ekran_karari():
+    """Eşik, açılış toleransı ve müdahale aralığı (saf fonksiyon)."""
+    assert bekci.ekran_karari(0, 3600, None, 100000) == "yok"
+    assert bekci.ekran_karari(1, 3600, None, 100000) == "yok"
+    assert bekci.ekran_karari(3, 3600, None, 100000) == "yeniden_baslat"
+    # yeni açılış (5 dk dolmadan) müdahale yok: panel kuruluyor olabilir
+    assert bekci.ekran_karari(9, 60, None, 100000) == "yok"
+    # az önce müdahale ettik → tekrar etme (reboot döngüsü olmasın)
+    assert bekci.ekran_karari(9, 3600, 100000 - 60, 100000) == "yok"
+    assert bekci.ekran_karari(9, 3600, 100000 - 700, 100000) == "yeniden_baslat"
+
+
+def test_yeniden_baslat_kuru_ve_basarisizlik():
+    basarili, mesaj = bekci.yeniden_baslat(kuru=True)
+    assert basarili is True and "kuru" in mesaj
+    gercek = bekci.subprocess.run
+    bekci.subprocess.run = lambda *a, **k: type("C", (), {"returncode": 1,
+                                                          "stderr": "sudo: parola gerekli"})()
+    try:
+        basarili, mesaj = bekci.yeniden_baslat()
+        assert basarili is False and "sudo" in mesaj, mesaj
+    finally:
+        bekci.subprocess.run = gercek
+
+
+def test_mudahale_zamani_kalicidir():
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["XDG_STATE_HOME"] = d
+        try:
+            assert bekci.son_mudahale_oku() is None
+            bekci.son_mudahale_yaz(1234.5)
+            assert abs(bekci.son_mudahale_oku() - 1234.5) < 1.5
+        finally:
+            del os.environ["XDG_STATE_HOME"]
+
+
+def test_dongu_ekran_kopmasinda_yeniden_baslatir():
+    """Panel bağlantısı koptuğunda bekçi kontrollü yeniden başlatma kararı vermeli."""
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["XDG_STATE_HOME"] = d
+        os.environ["XDG_RUNTIME_DIR"] = d
+        try:
+            cagrilar = []
+            gercek = {ad: getattr(bekci, ad) for ad in
+                      ("bekci_pid", "pano_pid", "baslat", "ekran_hatalari",
+                       "_sistem_yasi", "yeniden_baslat")}
+            bekci.bekci_pid = lambda haric=(): None
+            bekci.pano_pid = lambda haric=(): None
+            bekci.baslat = lambda yol=None: cagrilar.append("baslat") or 4242
+            bekci.ekran_hatalari = lambda dakika=None: 7
+            bekci._sistem_yasi = lambda: 3600.0
+            bekci.yeniden_baslat = lambda kuru=False, sinyal=None: (
+                cagrilar.append("yeniden_baslat"), (True, "test"))[1]
+            try:
+                karar = bekci.dongu(tur_sayisi=1)
+            finally:
+                for ad, fonk in gercek.items():
+                    setattr(bekci, ad, fonk)
+            assert karar == "yeniden_baslat", (karar, cagrilar)
+            assert cagrilar == ["baslat", "yeniden_baslat"], cagrilar
+            with open(bekci.gunluk_yolu()) as f:
+                icerik = f.read()
+            assert "panel bağlantısı koptu" in icerik, icerik
+            assert "fiş çekmekten güvenli" in icerik, icerik
+            assert bekci.son_mudahale_oku() is not None
+        finally:
+            del os.environ["XDG_STATE_HOME"], os.environ["XDG_RUNTIME_DIR"]
 
 
 def test_tani_metni_okunur():
