@@ -93,6 +93,7 @@ class Pano:
         self.log_tip = "birim"                # "birim" (systemd) | "dosya" (log dosyası) | "journal"
         self.log_etiketi = None               # journal kaynaklarında okunur ad
         self.log_pencere_ozet = None          # journal: son N dakikanın hata/uyarı sayısı
+        self.log_yatay = 0.0                  # günlük: yatay kaydırma (tasarım birimi)
         self.log_ozet = {"hata": 0, "uyari": 0}
         self.log_suz = False                  # yalnızca hata/uyarı satırları
         self.log_metin = ""
@@ -449,6 +450,7 @@ class Pano:
         self.log_birim = birim
         self.log_tip = "birim"
         self.log_etiketi = None
+        self.log_yatay = 0.0                 # uzun satırlar: yatay kaydırma sıfırdan
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -460,6 +462,7 @@ class Pano:
         self.log_birim = os.path.expanduser(str(yol))
         self.log_tip = "dosya"
         self.log_etiketi = None
+        self.log_yatay = 0.0
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -471,6 +474,7 @@ class Pano:
         self.log_birim = birim
         self.log_etiketi = etiket or birim
         self.log_tip = "journal"
+        self.log_yatay = 0.0
         self.log_sonuna = True
         self.log_yenile(ilk=True)
         self.gorunum_degistir("log")
@@ -509,6 +513,17 @@ class Pano:
     def _log_satirlar(self):
         return loglar_modul.suz(self.log_metin, self.log_suz).splitlines()
 
+    def _log_yatay_sinir(self):
+        """Yatay kaydırma üst sınırı: en uzun satır − görünen genişlik."""
+        gen = self.tasarim_g - 28.0
+        en_uzun = 0.0
+        for s in self._log_satirlar()[:80]:
+            try:
+                en_uzun = max(en_uzun, self._metin_gen(s, 10.5))
+            except Exception:
+                pass
+        return max(0.0, en_uzun - gen)
+
     def _log_icerik_y(self):
         return self.LOG_UST + len(self._log_satirlar()) * self.LOG_SATIR_Y + 24
 
@@ -535,6 +550,11 @@ class Pano:
                 ayrinti += f" · {ozet.get('hata', 0)} hata · {ozet.get('uyari', 0)} uyarı"
             if self.log_tip == "dosya":
                 ayrinti = _kirp_yol(self.log_birim, 46) + " · " + ayrinti
+        # yatay kaydırma ipucu: satırlar görünenden uzunsa devamı sürüklemeyle okunur
+        if self._log_yatay_sinir() > 1:
+            ayrinti += (" · ↔ %d%%" % round(100 * self.log_yatay /
+                                            self._log_yatay_sinir())
+                        if self.log_yatay > 1 else " · uzun satırları sürükleyin")
         c.yazi(x0 + self._metin_gen(baslik, 12, True) + 14, yb, ayrinti, 10, R["cok_soluk"])
         # süzgeç düğmesi + yenile
         dug = (self.tasarim_g - 14 - 92, yb - 14, 92, 28)
@@ -573,8 +593,11 @@ class Pano:
                 renk = R["sari"]
             else:
                 renk = R["yazi"] if i >= len(satirlar) - 30 else R["soluk"]
-            c.yazi(x0, self.LOG_UST + i * self.LOG_SATIR_Y,
-                   kartlar_modul._kirp(c, metin, 10.5, gen), 10.5, renk)
+            # yatay kaydırma: uzun satırların devamı okunabilsin
+            goster = (kartlar_modul._kirp(c, metin, 10.5, gen)
+                      if self.log_yatay <= 0.5 else metin)
+            c.yazi(x0 - self.log_yatay, self.LOG_UST + i * self.LOG_SATIR_Y,
+                   goster, 10.5, renk)
 
     # ── ayar ekranı ──
     def _bildir(self, metin, sure=None):
@@ -1110,6 +1133,7 @@ class Pano:
 
     # ── fare / tıklama / kaydırma ──
     def _basildi(self, olay):
+        self._yatay_baslangic = self.log_yatay
         self._tiklama = (olay.x, olay.y, self.kaydir)
         # Dokunma/tıklama büyüteci getirmesin: yeniden gerçek hareket gereksin
         self._gercek_hareket = False
@@ -1129,6 +1153,22 @@ class Pano:
             if kutu:
                 self._ayar_uygula(self._kaydirici,
                                   ayar_ekrani._kaydirici_deger(kutu, olay.x / self.S))
+                self.ciz()
+            return
+        if self.gorunum == "log" and self._tiklama is not None:
+            # günlükte parmak/fare sürüklemesi **iki eksende** kaydırır: uzun
+            # satırların devamı yatayda okunabilsin (kullanıcı isteği)
+            dx = olay.x - self._tiklama[0]
+            self.log_yatay = max(0.0, min(self._log_yatay_sinir(),
+                                          getattr(self, "_yatay_baslangic", 0.0) - dx / self.S))
+            if self._max_kaydir > 0:
+                yeni = max(0.0, min(self._max_kaydir,
+                                    self._tiklama[2] - (olay.y - self._tiklama[1])))
+                kayma = self.kaydir - yeni
+                if abs(kayma) >= 0.5:
+                    self.c.move("icerik", 0, kayma)
+                    self.kaydir = yeni
+            if time.monotonic() - self._son_cizim >= 0.15:
                 self.ciz()
             return
         if (self.gorunum == "terminal" or self._tiklama is None
@@ -1212,6 +1252,15 @@ class Pano:
         if self.gorunum == "terminal" and self.terminal:
             return self.terminal.tekerlek(olay)
         num = getattr(olay, "num", 0)
+        # günlükte Shift+tekerlek (ya da yatay tekerlek) yatay kaydırır
+        if self.gorunum == "log" and (getattr(olay, "state", 0) & 0x1
+                                      or num in (6, 7)):
+            yon = 1 if (num in (6, 7) and num == 6) or (num not in (6, 7)
+                                                       and getattr(olay, "delta", 0) > 0) else -1
+            self.log_yatay = max(0.0, min(self._log_yatay_sinir(),
+                                          self.log_yatay - yon * self.tasarim_g * 0.12))
+            self.ciz()
+            return
         yukari = (getattr(olay, "delta", 0) > 0) or num == 4
         adim = self.h * 0.18
         yeni = max(0.0, min(self._max_kaydir,

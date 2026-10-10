@@ -632,6 +632,51 @@ def test_servis_listesi_gorunumu():
         p.kapat()
 
 
+def test_gunluk_yatay_kaydirma():
+    """Uzun günlük satırlarının devamı yatay sürüklemeyle okunabilmeli."""
+    import tempfile
+    from syspano.cihaz import loglar as loglar_mod
+    p = _pano_olustur(kartlar=["cpu", "loglar"], guncelleme_denetimi=False)
+    if p is None:
+        return
+    gercek = loglar_mod.gunluk
+    uzun = ("2026-10-10 12:48:12 ERROR " + "çok uzun alan " * 30 +
+            "SONUNDAKI-ÖNEMLİ-BİLGİ")
+    loglar_mod.gunluk = lambda yol, satir=200: (uzun, "dosya")
+    yol = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as f:
+            f.write("kısa satır\n")
+            yol = f.name
+        p.log_ac_dosya(yol)
+        _bekle(p, 0.5)
+        p.ciz()
+        p.kok.update()
+        assert p.log_yatay == 0.0, p.log_yatay
+        # yatay sınır > 0 olmalı (satır görünenden uzun)
+        sinir = p._log_yatay_sinir()
+        assert sinir > 20, f"yatay sınır çok küçük: {sinir}"
+        # sürükleme benzetimi: sola doğru (satırın devamı görünsün)
+        import time as _t
+        p._tiklama = (600.0, 200.0, p.kaydir)
+        p._yatay_baslangic = 0.0
+        p.fare_ile_kaydir = True
+        p._surukle(type("O", (), {"x": 300.0, "y": 200.0, "state": 0}))
+        p.ciz()
+        p.kok.update()
+        assert p.log_yatay > 0, "yatay kaydırma olmadı"
+        assert p.log_yatay <= sinir + 0.5, f"sınır aşıldı: {p.log_yatay} > {sinir}"
+        # başlıkta ipucu görünür
+        metinler = _metinler(p)
+        assert any("↔" in t for t in metinler), "yatay kaydırma ipucu yok"
+        p.gorunum_degistir("pano")
+    finally:
+        loglar_mod.gunluk = gercek
+        if yol:
+            os.unlink(yol)
+        p.kapat()
+
+
 if __name__ == "__main__":
     import sys
     import traceback
