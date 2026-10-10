@@ -262,6 +262,23 @@ def test_baslatma_bolumu_duruma_gore():
     assert "BAŞLATMA" not in [k["etiket"] for k in plan["kutular"] if k["tur"] == "baslik"]
 
 
+def test_yedek_bolumu_duruma_gore():
+    """YEDEKLEME bölümü: durum satırları + eylem düğmeleri görünmeli."""
+    durum = dict(DURUM, yedek={"satirlar": [("Son yedek: 58 dk önce · başarılı", "yesil"),
+                                            ("Sıradaki: 11.10 20:05", "soluk")],
+                               "eylemler": ["yedek_simdi", "zamanlayici_kapat"]})
+    plan = A.yerlesim(1200, 700, AYARLAR, [], durum)
+    basliklar = [k["etiket"] for k in plan["kutular"] if k["tur"] == "baslik"]
+    assert "YEDEKLEME" in basliklar, basliklar
+    metinler = [k["etiket"] for k in plan["kutular"] if k["tur"] == "durum"]
+    assert any("Son yedek" in m for m in metinler), metinler
+    dugmeler = [k["id"] for k in plan["kutular"] if k["tur"] == "dugme"]
+    assert "yedek_simdi" in dugmeler and "zamanlayici_kapat" in dugmeler, dugmeler
+    # durum yoksa bölüm hiç çizilmez
+    plan = A.yerlesim(1200, 700, AYARLAR, [], DURUM)
+    assert "YEDEKLEME" not in [k["etiket"] for k in plan["kutular"] if k["tur"] == "baslik"]
+
+
 def test_cizim_icerik_icinde():
     """Tüm ayar ekranı, ölçekli içerik alanının dışına taşmamalı."""
     kok, cv, cek = _cekim_hazirla(olcek=1.7)
