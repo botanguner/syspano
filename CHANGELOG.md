@@ -3,6 +3,68 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
+## [1.17.1] — 2026-10-10
+
+### Düzeltildi
+- **Ayar ekranındaki YEDEKLEME bölümü, süren yedeği "başarılı" gösteriyordu.**
+  `systemctl is-active` bir `oneshot` birim çalışırken `activating` döner;
+  bölüm yalnızca `active` durumunu "sürüyor" saydığı için yedek boyunca ekranda
+  bir önceki çalışmanın "Son yedek: … başarılı" satırı duruyordu (canlıda
+  ölçüldü: 20 dakikalık çalışma boyunca yanlış durum). Artık `activating` ve
+  `reloading` de süren sayılır, `durum.json` içindeki `"durum": "calisiyor"`
+  alanı da dikkate alınır ve satır ilerlemeyi gösterir:
+  **"⏳ Yedek sürüyor… · 20 dk · 169 dosya"**.
+- Yedek sürerken **Şimdi yedekle** düğmesi çizilmez (ikinci çalıştırma
+  başlatılamasın).
+- **Yarıda kalmış yedek kaydı artık bayat sayılır.** Tarama başlarken durum
+  dosyasına `"durum": "calisiyor"` yazılır; makine tam o sırada kapanırsa kayıt
+  öyle kalır ve bölüm sonsuza kadar "⏳ Yedek sürüyor…" gösterip **Şimdi
+  yedekle** düğmesini gizlerdi. Birim gerçekten çalışmıyorsa ve kayıt 3 saatten
+  eskiyse "⚠ Yedek yarıda kalmış olabilir" yazılır; düğme geri gelir.
+- **Yedek kurulu değilken ayar ekranında boş bir YEDEKLEME bölümü duruyordu**
+  (Pi'de başlık + "kurulu değil" + beklenen dosya yolu). YEDEK kartı zaten
+  gizlendiği için bölüm de çizilmez; durum dosyası oluşur oluşmaz görünür.
+- `ortak.boyut_metni()` sayısal olmayan değerde panoyu çökertiyordu
+  (`"toplam_bayt": "yok"`); artık `—` döner.
+
+### Belgeler
+- **CHANGELOG 1.14.1'de kalmıştı**: 1.15.1, 1.16.0 ve 1.17.0 kayıtları geri
+  eklendi. "En üstteki kayıt koddaki sürümle aynı mı" testi eklendi, böylece
+  sürüm yükseltilip kayıt unutulursa CI yakalar.
+- 9 yeni test → 23 dosyada 218 test.
+
+## [1.17.0] — 2026-10-10
+
+### Eklendi
+- **Ayar ekranına YEDEKLEME bölümü.** Durum satırları (son yedek, dosya sayısı,
+  boyut, sıradaki çalışma) ve düğmeler: **Şimdi yedekle**,
+  **Otomatik yedeği aç/kapat**. Bölüm yalnızca `yedek_durum_yolu` dosyası
+  varsa görünür.
+- `cihaz/yedek.py`: `durum_metni()` ve `eylem()`. **Şimdi yedekle**
+  `systemctl --user start --no-block` kullanır: yedek dakikalarca sürdüğü için
+  (canlıda ~25 dk) beklemeli çağrı panoyu o süre boyunca kilitlerdi.
+- 6 yeni test → 23 dosyada 209 test.
+
+## [1.16.0] — 2026-10-10
+
+### Eklendi
+- **Günlük görüntüleyicide yatay kaydırma.** Uzun satırlarda önemli bilgi
+  satırın sonunda kaldığı için kırpılıyordu. Artık iki eksende kaydırma var:
+  yatay sürükleme ve Shift/tekerlek; sınır en uzun satır − görünen genişlik,
+  başlıkta `↔ %` ipucu.
+- 1 yeni test → 22 dosyada 203 test.
+
+## [1.15.1] — 2026-10-10
+
+### Düzeltildi
+- **Küçük ekranda kartlar gizlenince kaydırma kapanıyordu.** Pi'de 14 karttan
+  12'si gizleniyor, gizleme sığdırdığı için kaydırma kapalı kalıyordu; sonuçta
+  SERVİSLER kartının altı görünmüyor ve kaydırılamıyordu. Artık gizleme en
+  fazla **3 kart**; daha fazlası gerekiyorsa hiç gizleme yapılmaz ve pano
+  kaydırılabilir olur. Gizleme yalnızca kaydırmasız sığdırmayı başarıyorsa
+  uygulanır.
+- 1 yeni test → 22 dosyada 202 test.
+
 ## [1.14.1] — 2026-10-10
 
 ### Düzeltildi
@@ -148,7 +210,7 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
   tutucuyu dolduran komut ve `./kur-pi.sh` işaret ediliyor.
 
 ### Test
-- 7 yeni test (`tests/test_install.py`): yardım metni, oturum girdisinin
+- 9 yeni test (`tests/test_install.py`): yardım metni, oturum girdisinin
   `Exec` yolunu **doldurduğu** (`@KOMUT@` kalmıyor), manuel seçeneğin hiçbir şey
   yazmadığı, servis biriminin yazıldığı (`systemctl` yokken çökmemesi), eski
   bayrakların uyumu, `--sor` ile boru girdisinden seçim (2 → servis, 3 → manuel)
@@ -223,7 +285,7 @@ Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
     içine tek satır yeterlidir: `syspano --bekci &`.
     (Bu iş, kullanıcının "ekran dondu, fişi çekmek zorunda kaldım" bildirimi
     üzerine eklendi: artık donan pano kendini toparlar.)
-- 7 yeni test (toplam **18 dosyada 165 test**): karar mantığı (başlat/öldür/bekle),
+- 9 yeni test (toplam **18 dosyada 165 test**): karar mantığı (başlat/öldür/bekle),
   kalp yaşı ve eşik davranışı, süreç tanıma (bekçi ve tepsi pano sayılmaz),
   günlük yazımı, kuru çalıştırma, zararsız bir süreci sonlandırma, tanı metni.
 

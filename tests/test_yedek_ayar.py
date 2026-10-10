@@ -23,10 +23,109 @@ def _sahte_sorgu(zamanlayici=None, etkin=True, calisiyor=False):
     return {"zamanlayici_etkin": etkin, "calisiyor": calisiyor}
 
 
-def test_durum_yoksa_kurulu_degil():
+def test_durum_yoksa_bolum_gizli():
+    """Kurulu değilse boş döner: ayar ekranı YEDEKLEME bölümünü çizmez."""
     with tempfile.TemporaryDirectory() as d:
         satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": f"{d}/yok.json"})
-    assert "kurulu değil" in satirlar[0][0] and eylemler == [], (satirlar, eylemler)
+    assert satirlar == [] and eylemler == [], (satirlar, eylemler)
+
+
+def test_sorgu_activating_durumunu_suruyor_sayar():
+    """`systemctl is-active` bir oneshot çalışırken 'activating' döner."""
+    gercek = yedek._calistir
+    yedek._calistir = lambda k, z=10: (0, "activating")
+    yedek._onbellek.update({"zaman": 0.0, "sonuc": {}})
+    try:
+        s = yedek._sorgu("yedek.timer")
+    finally:
+        yedek._calistir = gercek
+        yedek._onbellek.update({"zaman": 0.0, "sonuc": {}})
+    assert s["calisiyor"] is True and s["zamanlayici_etkin"] is True, s
+
+
+def test_sorgu_inactive_suruyor_saymaz():
+    gercek = yedek._calistir
+    yedek._calistir = lambda k, z=10: (3, "inactive")
+    yedek._onbellek.update({"zaman": 0.0, "sonuc": {}})
+    try:
+        s = yedek._sorgu("yedek.timer")
+    finally:
+        yedek._calistir = gercek
+        yedek._onbellek.update({"zaman": 0.0, "sonuc": {}})
+    assert s == {"zamanlayici_etkin": False, "calisiyor": False}, s
+
+
+def test_dosya_surerken_dese_suruyor_ve_dugme_yok():
+    """systemctl henüz 'active' demese bile durum dosyası 'calisiyor' diyorsa
+    bölüm 'başarılı' göstermemeli ve ikinci yedek düğmesi çıkmamalı."""
+    with tempfile.TemporaryDirectory() as d:
+        _durum_dosyasi(d, {"durum": "calisiyor", "sonuc": 0,
+                           "baslangic": time.time() - 1200, "yuklenen": 169})
+        gercek = yedek._sorgu
+        yedek._sorgu = lambda z, taze=False: _sahte_sorgu(etkin=True, calisiyor=False)
+        try:
+            satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": f"{d}/durum.json"})
+        finally:
+            yedek._sorgu = gercek
+    assert "sürüyor" in satirlar[0][0] and satirlar[0][1] == "mavi", satirlar
+    assert "20 dk" in satirlar[0][0] and "169 dosya" in satirlar[0][0], satirlar
+    assert "yedek_simdi" not in eylemler, eylemler
+
+
+def test_bozuk_dosyada_hata_ve_dugme():
+    with tempfile.TemporaryDirectory() as d:
+        yol = os.path.join(d, "durum.json")
+        with open(yol, "w") as f:
+            f.write("{bozuk json")
+        satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": yol})
+    assert "okunamadı" in satirlar[0][0] and satirlar[0][1] == "kirmizi", satirlar
+    assert eylemler == ["yedek_simdi"], eylemler
+
+
+def test_yarida_kalmis_kayit_bayat_sayilir():
+    """Yedek sürerken makine kapanırsa durum dosyası 'calisiyor' kalır: bu kayıt
+    sonsuza kadar 'sürüyor' göstermemeli, 'Şimdi yedekle' geri gelmeli."""
+    with tempfile.TemporaryDirectory() as d:
+        _durum_dosyasi(d, {"durum": "calisiyor", "sonuc": 0,
+                           "baslangic": time.time() - 5 * 3600})
+        gercek = yedek._sorgu
+        yedek._sorgu = lambda z, taze=False: _sahte_sorgu(etkin=True, calisiyor=False)
+        try:
+            satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": f"{d}/durum.json"})
+        finally:
+            yedek._sorgu = gercek
+    assert "yarıda kalmış" in satirlar[0][0] and satirlar[0][1] == "sari", satirlar
+    assert "yedek_simdi" in eylemler, eylemler
+
+
+def test_uzun_suren_yedek_hala_suruyor():
+    """Birim gerçekten çalışıyorsa süre uzun da olsa bayat sayılmaz."""
+    with tempfile.TemporaryDirectory() as d:
+        _durum_dosyasi(d, {"durum": "calisiyor", "sonuc": 0,
+                           "baslangic": time.time() - 5 * 3600})
+        gercek = yedek._sorgu
+        yedek._sorgu = lambda z, taze=False: _sahte_sorgu(etkin=True, calisiyor=True)
+        try:
+            satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": f"{d}/durum.json"})
+        finally:
+            yedek._sorgu = gercek
+    assert "sürüyor" in satirlar[0][0], satirlar
+    assert "yedek_simdi" not in eylemler, eylemler
+
+
+def test_bozuk_sayilar_cokme_yaratmaz():
+    """Durum dosyası bozuk sayı içerse de bölüm çizilebilmeli."""
+    with tempfile.TemporaryDirectory() as d:
+        _durum_dosyasi(d, {"durum": "basarili", "sonuc": 0, "baslangic": "bozuk",
+                           "yuklenen": "N/A", "toplam_bayt": "yok"})
+        gercek = yedek._sorgu
+        yedek._sorgu = lambda z, taze=False: _sahte_sorgu(etkin=False)
+        try:
+            satirlar, eylemler = yedek.durum_metni({"yedek_durum_yolu": f"{d}/durum.json"})
+        finally:
+            yedek._sorgu = gercek
+    assert satirlar and "başarılı" in satirlar[0][0], satirlar
+    assert "zamanlayici_ac" in eylemler, eylemler
 
 
 def test_durum_basarili_ve_siradaki():

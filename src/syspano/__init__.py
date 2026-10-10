@@ -5,5 +5,5 @@ küçük bir tek kart bilgisayarda (Raspberry Pi + dokunmatik panel) çalışır
 Ekran boyutuna, çözünürlüğe ve DPI'a göre kendini uyarlar.
 """
 
-__version__ = "1.17.0"
+__version__ = "1.17.1"
 UYGULAMA_ADI = "SysPano"
