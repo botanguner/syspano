@@ -39,12 +39,6 @@ tarayıcılar ve GitHub'ın önbelleği eski kareyi göstermeye devam eder.</sub
 | **YEDEK** | *(isteğe bağlı)* gdrive-yedek durumu: son yedek, dosya sayısı, boyut, sıradaki çalışma |
 | **SİSTEM** | Ana makine adı, dağıtım, çekirdek, mimari, çalışma süresi, oturum |
 
-Her kartın **içeriğine göre** doğal bir yüksekliği ve alt sınırı vardır: pil gibi
-kısa kartlar az, süreç/servis listeleri çok yer alır; yer darsa doğal
-yükseklikler orantılı küçülür (alt sınırların altına inmeden), yer bolsa
-%60'a kadar büyüyüp ekranı doldurur. Yani kartlar aynı boyutta olmak zorunda
-değildir.
-
 Veriler 1 saniyede bir okunur. Gömülü bir **terminal** (⌨ düğmesi) ve isteğe
 bağlı bir **tepsi simgesi** vardır.
 

@@ -3,30 +3,7 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.15.0] — 2026-10-10
-
-### Değişti
-- **Kart boyutları artık içeriğe göre (akıllı).** Eskiden satır yüksekliği tek
-  bir birim katsayısıyla soyut "ağırlık"lardan hesaplanıyordu; bu yüzden pil
-  gibi kısa kartlar CPU ile aynı yüksekliği alıyor, çoğu satır aynı boyutta
-  görünüyordu (kullanıcı bildirdi). Artık her kartın **doğal yüksekliği**
-  (`dogal`) ve **alt sınırı** (`min`) var:
-  - pil 96 · çekirdek 98 · pisaglik 120 · sicaklik 130 · sistem 140 · gpu 150 ·
-    disk_ag 165 · süreçler/servisler 175 tasarım birimi (yerleşim sırası:
-    pil/çekirdek satırı ~100, CPU satırı ~150, listeler ~180),
-  - yer darsa doğal yükseklikler orantılı küçülür ama **alt sınırların altına
-    inmez**; alt sınırlar bile sığmıyorsa önemsiz kartlar gizlenir / pano
-    kaydırılabilir olur (davranış korundu),
-  - yer bolsa doğal yükseklik **%60'a kadar** büyüyüp ekranı doldurur (4K'da
-    boşluk kalmaz),
-  - satır aralıkları (BOSLUK) artık yükseklik hesabına katılıyor (eskiden
-    içerik bir boşluk kadar taşabiliyordu).
-- Ölçüm (tasarım birimi satır yükseklikleri): 14" `[155, 101, 170, 180, 144]` ·
-  4K `[201, 131, 221, 235, 188]` · Pi 800×480 `[126, 109]` — pil satırı her
-  ekranda en kısa.
-- Kullanılmayan `yuk` alanı kaldırıldı (yerleşim artık `min`/`dogal` kullanıyor).
-
-## [1.14.1] — 2026-10-10 — 2026-10-10
+## [1.14.1] — 2026-10-10
 
 ### Düzeltildi
 - **"Yeni sürüm var: 1.13.1" — sürüm aynı olduğu hâlde güncelleme uyarısı.**
