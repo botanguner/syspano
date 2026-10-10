@@ -27,6 +27,36 @@ KOMUT_YOLU = os.path.join(CALISMA, "komut")
 DURUM_YOLU = os.path.join(CALISMA, "durum.json")
 
 
+def _cmdline(pid):
+    try:
+        with open(f"/proc/{int(pid)}/cmdline", "rb") as f:
+            return [x.decode("utf-8", "replace")
+                    for x in f.read().split(b"\0") if x]
+    except Exception:
+        return []
+
+
+def tepsi_pid(haric=()):
+    """Çalışan başka bir tepsi sürecinin PID'i (yoksa None)."""
+    haric = set(haric) | {os.getpid()}
+    try:
+        pidler = sorted(int(p) for p in os.listdir("/proc") if p.isdigit())
+    except Exception:
+        return None
+    for pid in pidler:
+        if pid in haric:
+            continue
+        if any(a.endswith("syspano.tepsi") or a == "syspano.tepsi"
+               for a in _cmdline(pid)):
+            return pid
+    return None
+
+
+def sahipsiz_mi(ilk_ebeveyn, simdiki_ebeveyn):
+    """Pano (ebeveyn) kapandı mı? (saf fonksiyon: /proc testi gerektirmez)"""
+    return bool(ilk_ebeveyn) and int(simdiki_ebeveyn) != int(ilk_ebeveyn)
+
+
 def komut_gonder(metin):
     try:
         with open(KOMUT_YOLU + ".tmp", "w") as f:
@@ -72,6 +102,15 @@ def simge_ciz():
 
 class Tepsi:
     def __init__(self):
+        # Tek kopya: başka bir tepsi çalışıyorsa çık (her pano yeniden
+        # başlatmasında yeni bir simge birikiyordu — kullanıcı bildirdi).
+        baska = tepsi_pid()
+        if baska:
+            print(f"başka bir tepsi zaten çalışıyor (pid {baska}) — çıkılıyor",
+                  flush=True)
+            raise SystemExit(0)
+        # Yetim denetimi: pano kapanırsa tepsi de kapansın (SIGKILL'de bile).
+        self.ebeveyn = os.getppid()
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("SysPano")
         self.app.setQuitOnLastWindowClosed(False)
@@ -122,6 +161,10 @@ class Tepsi:
             komut_gonder("degistir_gorunurluk")
 
     def durum_guncelle(self):
+        if sahipsiz_mi(self.ebeveyn, os.getppid()):
+            print("pano kapandı — tepsi kapanıyor", flush=True)
+            self.app.quit()
+            return
         d = durum_oku()
         if not d:
             self.a_goster.setText("Panoyu başlat")
