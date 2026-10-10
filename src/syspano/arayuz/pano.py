@@ -476,7 +476,10 @@ class Pano:
         try:
             if self.log_tip == "dosya":
                 metin, kaynak = loglar_modul.gunluk(self.log_birim, satir)
-                self.log_pencere_ozet = None
+                ozet = loglar_modul.ozet_metin(
+                    metin, self.ayarlar.get("log_pencere_dk")
+                    or loglar_modul.VARSAYILAN_PENCERE_DK)
+                self.log_pencere_ozet = ozet if ozet["pencereli"] else None
             elif self.log_tip == "journal":
                 metin, kaynak = loglar_modul.gunluk_journal(self.log_birim, satir)
                 # zaman penceresine göre hata/uyarı: son 200 satırdaki eski

@@ -3,7 +3,23 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.12.0] — 2026-10-10
+## [1.13.0] — 2026-10-10
+
+### Değişti
+- **Dosya günlüklerinde de zaman penceresi.** Journald kaynaklarında 1.6.0'dan
+  beri pencere kullanılıyordu; dosya günlüklerinde ise "son 200 satır" sayımı
+  kalıyordu — bu yüzden Apache `error.log` gibi dosyalar, düzeltme öncesi eski
+  satırlar yüzünden hâlâ yüksek "uyarı" sayısı gösteriyordu. Artık satır
+  başındaki zaman damgası okunuyor (ISO, `2026/10/10 12:48:12`, Apache
+  `[Thu Oct 08 16:42:53.327959 2026]`) ve yalnızca **son 60 dakika** sayılıyor;
+  damgasız satırlar her zaman sayılır. Hiç damga bulunamazsa son satırlara
+  düşülür ve `--log-kaynaklar` bunu dipnotla söyler.
+- Görüntüleyici başlığı dosya kaynaklarında da pencereyi yazar
+  (`… · son 60 dk: 1 hata · 1 uyarı`).
+- 3 yeni test (toplam **21 dosyada 196 test**): damga biçimleri, pencere sayımı
+  (damgasız satır dâhil), dosyada pencere uygulaması.
+
+## [1.12.0] — 2026-10-10 — 2026-10-10
 
 ### Eklendi
 - **Ayarlar ekranına "BAŞLATMA" bölümü.** Pano nasıl başlatıldığını ve servis
