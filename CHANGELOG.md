@@ -3,7 +3,19 @@
 Biçim: [Keep a Changelog](https://keepachangelog.com/tr/1.1.0/) ·
 Sürümleme: [Semantic Versioning](https://semver.org/lang/tr/).
 
-## [1.14.0] — 2026-10-10
+## [1.14.1] — 2026-10-10
+
+### Düzeltildi
+- **"Yeni sürüm var: 1.13.1" — sürüm aynı olduğu hâlde güncelleme uyarısı.**
+  Denetim `geride > 0` (yeni **commit**) durumunu "yeni sürüm" diye yazıyordu;
+  sürüm numarası değişmemişse ekranda "SysPano 1.13.1" ile "Yeni sürüm var:
+  1.13.1" yan yana çıkıyordu (kullanıcı ekran görüntüsüyle bildirdi). Artık
+  sürüm gerçekten yeniyse "yeni sürüm var: X", yalnızca commit farkı varsa
+  "yeni değişiklikler var (N yeni commit)" yazılır; panelde satır kısa tutulur,
+  komut satırında son commit konusu da görünür.
+- 1 test güncellendi + 1 yeni durum (toplam **22 dosyada 201 test**).
+
+## [1.14.0] — 2026-10-10 — 2026-10-10
 
 ### Eklendi
 - **Tüm servisler listesi.** Kartta yer yetmeyince yazılan "+N servis daha"
